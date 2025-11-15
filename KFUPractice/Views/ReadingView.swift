@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import PDFKit
 
 /// Экран для чтения книги
 struct ReadingView: View {
@@ -13,6 +14,7 @@ struct ReadingView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showNavigationBar = true
     @State private var lastTapTime = Date()
+    @State private var showAreaSelection: Bool = false
 
     init(book: Book) {
         self._viewModel = StateObject(wrappedValue: ReadingViewModel(book: book))
@@ -66,6 +68,35 @@ struct ReadingView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, geometry.safeAreaInsets.top + 60)
                         .padding(.bottom, geometry.safeAreaInsets.bottom + 60)
+                    }
+                }
+            )
+            .overlay(
+                // Плавающее меню действий
+                FloatingActionMenu(
+                    pdfDocument: viewModel.pdfDocument,
+                    currentPageNumber: viewModel.currentPageNumber,
+                    onAreaSelected: {
+                        showAreaSelection = true
+                    }
+                )
+                .zIndex(100)
+            )
+            .overlay(
+                // Рамка выбора области для PDF
+                Group {
+                    if showAreaSelection && viewModel.book.format == .pdf {
+                        AreaSelectionView(
+                            isPresented: $showAreaSelection,
+                            pdfDocument: viewModel.pdfDocument,
+                            currentPageNumber: viewModel.currentPageNumber,
+                            onScanComplete: { image, text in
+                                print("📝 [ReadingView] Распознанный текст: \(text)")
+                                print("🖼️ [ReadingView] Изображение: \(image.size)")
+                                // TODO: Отправить изображение в AI с промпт-запросом
+                            }
+                        )
+                        .zIndex(200)
                     }
                 }
             )
@@ -155,24 +186,43 @@ struct ReadingView: View {
     @ViewBuilder
     private func contentView() -> some View {
         GeometryReader { geometry in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    if viewModel.isLoading {
-                        loadingView
-                    } else if viewModel.isChangingPage {
-                        pageChangingView
-                    } else if let error = viewModel.errorMessage {
-                        errorView(error)
-                    } else {
-                        textContentView()
+            if viewModel.isLoading {
+                loadingView
+            } else if viewModel.isChangingPage {
+                pageChangingView
+            } else if let error = viewModel.errorMessage {
+                errorView(error)
+            } else {
+                // Для PDF используем специальный компонент с анимацией
+                if viewModel.book.format == .pdf, let pdfDocument = viewModel.pdfDocument {
+                    pdfContentView(pdfDocument: pdfDocument)
+                } else {
+                    // Для EPUB и TXT используем текстовый контент
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            textContentView()
+                        }
+                        .frame(minHeight: geometry.size.height)
                     }
+                    .padding(.horizontal, max(16, viewModel.readingSettings.horizontalPadding))
+                    .clipped()
                 }
-                .frame(minHeight: geometry.size.height)
             }
-            .padding(.horizontal, max(16, viewModel.readingSettings.horizontalPadding))
-            .clipped()
         }
     }
+    
+    @ViewBuilder
+    private func pdfContentView(pdfDocument: PDFDocument) -> some View {
+        PDFBookView(
+            pdfDocument: pdfDocument,
+            currentPageNumber: $viewModel.currentPageNumber,
+            onPageChanged: { pageNumber in
+                // Обновляем контент при смене страницы
+                viewModel.currentPageNumber = pageNumber
+            }
+        )
+    }
+    
     @ViewBuilder
     private func textContentView() -> some View {
         UniversalSelectableText(

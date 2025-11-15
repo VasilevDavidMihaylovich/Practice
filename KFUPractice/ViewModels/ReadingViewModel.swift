@@ -54,6 +54,10 @@ class ReadingViewModel: ObservableObject {
     @Published var epubPages: [EPUBPage] = []
     @Published var currentChapterInfo: (title: String, chapterNumber: Int)?
     
+    // MARK: - PDF Support
+    
+    @Published var pdfDocument: PDFDocument?
+    
     // MARK: - Book Properties
     
     let book: Book
@@ -326,36 +330,40 @@ class ReadingViewModel: ObservableObject {
                 return
             }
             
-            var extractedPages: [String] = []
-            var fullText = ""
-            
-            // Извлекаем текст со всех страниц
-            for pageIndex in 0..<pdfDocument.pageCount {
-                if let page = pdfDocument.page(at: pageIndex) {
-                    let pageText = page.string ?? ""
-                    
-                    if !pageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        // Разбиваем длинные страницы на части для удобства чтения
-                        let pageChunks = splitPageIntoChunks(pageText, maxChunkSize: 1500)
-                        extractedPages.append(contentsOf: pageChunks)
+            await MainActor.run {
+                // Сохраняем PDF документ для отображения с изображениями
+                self.pdfDocument = pdfDocument
+                
+                // Создаем страницы на основе реальных страниц PDF
+                var pdfPages: [String] = []
+                var fullText = ""
+                
+                // Извлекаем текст для поиска и других функций
+                for pageIndex in 0..<pdfDocument.pageCount {
+                    if let page = pdfDocument.page(at: pageIndex) {
+                        let pageText = page.string ?? ""
                         fullText += pageText + "\n\n"
-                    } else {
-                        // Если на странице нет текста, добавляем заглушку
-                        extractedPages.append("Страница \(pageIndex + 1): Содержимое не распознано или отсутствует")
+                        
+                        // Создаем страницу (даже если нет текста, страница будет отображаться как изображение)
+                        if !pageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            pdfPages.append("PDF_PAGE_\(pageIndex)")
+                        } else {
+                            // Страница с изображениями без текста
+                            pdfPages.append("PDF_PAGE_\(pageIndex)")
+                        }
                     }
                 }
-            }
-            
-            await MainActor.run {
-                // Если не удалось извлечь текст, показываем информационное сообщение
-                if extractedPages.isEmpty {
-                    self.pages = ["PDF файл не содержит распознаваемого текста.\n\nВозможно, это файл со сканированными изображениями. В будущих версиях будет добавлена поддержка OCR для извлечения текста из изображений."]
-                    self.fullContent = ""
-                } else {
-                    self.pages = extractedPages
-                    self.fullContent = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Если нет страниц, создаем хотя бы одну
+                if pdfPages.isEmpty {
+                    pdfPages = ["PDF_PAGE_0"]
                 }
+                
+                self.pages = pdfPages
+                self.fullContent = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
                 self.currentPageNumber = 0
+                
+                print("✅ [ReadingViewModel] PDF загружен: \(pdfDocument.pageCount) страниц")
             }
             
         } catch {
@@ -435,7 +443,13 @@ class ReadingViewModel: ObservableObject {
     
     func nextPage() {
         print("➡️ [ReadingViewModel] nextPage() tapped. currentPageNumber = \(currentPageNumber)")
-        if currentPageNumber < pages.count - 1 {
+        
+        // Для PDF используем реальное количество страниц
+        let maxPage = book.format == .pdf && pdfDocument != nil 
+            ? (pdfDocument?.pageCount ?? 0) - 1 
+            : pages.count - 1
+        
+        if currentPageNumber < maxPage {
             isChangingPage = true  // Начинаем смену страницы
             currentPageNumber += 1
             print("   • new currentPageNumber = \(currentPageNumber)")
@@ -464,7 +478,13 @@ class ReadingViewModel: ObservableObject {
     
     func goToPage(_ pageNumber: Int) {
         print("🔢 [ReadingViewModel] goToPage(\(pageNumber)) called. pages.count = \(pages.count)")
-        if pageNumber >= 0 && pageNumber < pages.count {
+        
+        // Для PDF используем реальное количество страниц
+        let maxPage = book.format == .pdf && pdfDocument != nil 
+            ? (pdfDocument?.pageCount ?? 0) 
+            : pages.count
+        
+        if pageNumber >= 0 && pageNumber < maxPage {
             isChangingPage = true  // Начинаем смену страницы
             currentPageNumber = pageNumber
             print("   • currentPageNumber set to \(currentPageNumber)")
@@ -479,17 +499,31 @@ class ReadingViewModel: ObservableObject {
     // MARK: - Reading Progress
     
     var readingProgress: Double {
-        guard pages.count > 0 else { return 0 }
-        return Double(currentPageNumber) / Double(pages.count - 1)
+        // Для PDF используем реальное количество страниц
+        let total = book.format == .pdf && pdfDocument != nil 
+            ? (pdfDocument?.pageCount ?? 1) 
+            : max(pages.count, 1)
+        
+        guard total > 1 else { return 0 }
+        return Double(currentPageNumber) / Double(total - 1)
     }
     
     var progressText: String {
-        "\(currentPageNumber + 1) / \(pages.count)"
+        let total = book.format == .pdf && pdfDocument != nil 
+            ? (pdfDocument?.pageCount ?? pages.count) 
+            : pages.count
+        return "\(currentPageNumber + 1) / \(total)"
     }
     
     // MARK: - Current Page Content
     
     private func updateCurrentPageContent() {
+        // Для PDF не обновляем текстовый контент, так как страницы отображаются как изображения
+        if book.format == .pdf {
+            isChangingPage = false
+            return
+        }
+        
         guard currentPageNumber < pages.count && currentPageNumber >= 0 else { 
             currentPageContent = ""
             isChangingPage = false  // Завершаем смену страницы даже при ошибке
@@ -512,6 +546,10 @@ class ReadingViewModel: ObservableObject {
     }
     
     var totalPages: Int {
+        // Для PDF используем реальное количество страниц
+        if book.format == .pdf, let pdfDoc = pdfDocument {
+            return pdfDoc.pageCount
+        }
         return pages.count
     }
     
