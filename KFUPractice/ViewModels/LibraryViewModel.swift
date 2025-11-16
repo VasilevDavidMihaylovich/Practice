@@ -23,32 +23,50 @@ class LibraryViewModel: ObservableObject {
     private let bookStorage = BookStorageService.shared
     
     init() {
+        print("📱 [LibraryViewModel] Инициализация LibraryViewModel")
         // Загружаем сохраненные книги при инициализации
         loadBooks()
+        // Показываем информацию о хранилище для диагностики
+        bookStorage.getStorageInfo()
     }
     
     // MARK: - Public Methods
     
-    /// Загрузить все книги
+    /// Загрузить все книги с подробным логированием
     func loadBooks() {
+        print("📱 [LibraryViewModel] Загрузка книг...")
         isLoading = true
         errorMessage = nil
         
-        // Загружаем книги из UserDefaults
+        // Загружаем книги из хранилища
         let loadedBooks = bookStorage.loadBooks()
+        print("📱 [LibraryViewModel] Загружено книг из хранилища: \(loadedBooks.count)")
         
-        // Проверяем, что файлы книг еще существуют
+        // Фильтруем книги по существованию файлов (уже делается в BookStorageService, но для надежности)
         let validBooks = loadedBooks.filter { book in
-            bookStorage.bookFileExists(at: book.filePath)
+            let exists = bookStorage.bookFileExists(at: book.filePath)
+            if !exists {
+                print("⚠️ [LibraryViewModel] Файл не найден: \(book.filePath)")
+            }
+            return exists
         }
+        
+        print("📱 [LibraryViewModel] Валидных книг: \(validBooks.count)")
         
         // Если некоторые файлы были удалены, обновляем хранилище
         if validBooks.count != loadedBooks.count {
+            print("📱 [LibraryViewModel] Обновляем хранилище, удаляем \(loadedBooks.count - validBooks.count) недоступных книг")
             bookStorage.saveBooks(validBooks)
         }
         
-        books = validBooks.sorted(by: sortBy.sortFunction)
+        // Сортируем книги
+        let sortedBooks = validBooks.sorted(by: sortBy.sortFunction)
+        
+        // Обновляем UI
+        books = sortedBooks
         isLoading = false
+        
+        print("📱 [LibraryViewModel] Загрузка завершена, отображается \(books.count) книг")
     }
     
     /// Импортировать книгу из файла
@@ -62,13 +80,15 @@ class LibraryViewModel: ObservableObject {
             // Создаем книгу и добавляем в хранилище
             if let newBook = bookStorage.createBook(from: fileURL) {
                 print("✅ Книга создана: \(newBook.title) (\(newBook.format.displayName))")
-                await bookStorage.addBook(newBook)
+                
+                // Добавляем книгу в хранилище (синхронно)
+                bookStorage.addBook(newBook)
                 print("✅ Книга добавлена в хранилище")
                 
-                // Обновляем UI
+                // Обновляем UI на главном потоке
                 await MainActor.run {
                     loadBooks() // Перезагружаем список
-                    print("🔄 Список книг обновлен")
+                    print("🔄 Список книг обновлен, всего книг: \(books.count)")
                 }
             } else {
                 print("❌ Не удалось создать книгу из файла")
@@ -83,7 +103,9 @@ class LibraryViewModel: ObservableObject {
             }
         }
         
-        isLoading = false
+        await MainActor.run {
+            isLoading = false
+        }
     }
     
     /// Удалить книгу
@@ -161,24 +183,33 @@ class LibraryViewModel: ObservableObject {
         return result.sorted(by: sortBy.sortFunction)
     }
     
-    /// Очистить все книги (для отладки)
-    func clearAllBooks() {
-        bookStorage.clearAllBooks()
-        loadBooks()
-    }
-    
     // MARK: - Demo Content Creation
     
     /// Создает демонстрационный PDF файл для тестирования
     func createSamplePDFBook() async {
+        print("📚 [LibraryViewModel] Создание демонстрационной PDF книги...")
+        
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+        
         do {
             let samplePDF = createSamplePDFDocument()
             let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            let pdfURL = documentsPath.appendingPathComponent("Основы_Swift.pdf")
+            let timestamp = Int(Date().timeIntervalSince1970)
+            let pdfURL = documentsPath.appendingPathComponent("Books/Основы_Swift_\(timestamp).pdf")
+            
+            // Создаем директорию Books если её нет
+            let booksDir = documentsPath.appendingPathComponent("Books")
+            if !FileManager.default.fileExists(atPath: booksDir.path) {
+                try FileManager.default.createDirectory(at: booksDir, withIntermediateDirectories: true)
+            }
             
             // Сохраняем PDF файл
             let pdfData = samplePDF.dataRepresentation()
             try pdfData?.write(to: pdfURL)
+            print("📚 [LibraryViewModel] PDF файл сохранен: \(pdfURL.path)")
             
             // Создаем объект книги
             let sampleBook = Book(
@@ -194,14 +225,27 @@ class LibraryViewModel: ObservableObject {
                 readingProgress: 0.0
             )
             
-            // Добавляем книгу в библиотеку
-            await bookStorage.addBook(sampleBook)
+            print("📚 [LibraryViewModel] Создан объект книги: \(sampleBook.title)")
             
-            // Обновляем список книг
-            loadBooks()
+            // Добавляем книгу в библиотеку (синхронно)
+            bookStorage.addBook(sampleBook)
+            print("📚 [LibraryViewModel] Книга добавлена в хранилище")
+            
+            // Обновляем список книг на главном потоке
+            await MainActor.run {
+                loadBooks()
+                print("📚 [LibraryViewModel] Список книг обновлен, всего: \(books.count)")
+            }
             
         } catch {
-            errorMessage = "Ошибка создания демонстрационного PDF: \(error.localizedDescription)"
+            print("❌ [LibraryViewModel] Ошибка создания демонстрационной книги: \(error)")
+            await MainActor.run {
+                errorMessage = "Ошибка создания демонстрационного PDF: \(error.localizedDescription)"
+            }
+        }
+        
+        await MainActor.run {
+            isLoading = false
         }
     }
     
@@ -315,6 +359,31 @@ class LibraryViewModel: ObservableObject {
         // Создаем PDFPage из данных
         let pdfDocument = PDFDocument(data: pdfData as Data)!
         return pdfDocument.page(at: 0)!
+    }
+    
+    // MARK: - Debug and Diagnostic Functions
+    
+    /// Очистить все книги (для отладки)
+    func clearAllBooks() {
+        print("🗑️ [LibraryViewModel] Очищаем все книги...")
+        bookStorage.clearAllBooks()
+        loadBooks()
+        print("🗑️ [LibraryViewModel] Все книги удалены, текущее количество: \(books.count)")
+    }
+    
+    /// Показать диагностическую информацию
+    func showDiagnosticInfo() {
+        print("🔍 [LibraryViewModel] Диагностическая информация:")
+        print("🔍 [LibraryViewModel] Текущее количество книг в UI: \(books.count)")
+        print("🔍 [LibraryViewModel] Состояние загрузки: \(isLoading)")
+        print("🔍 [LibraryViewModel] Ошибки: \(errorMessage ?? "нет")")
+        bookStorage.getStorageInfo()
+    }
+    
+    /// Принудительно перезагрузить книги
+    func forceReloadBooks() {
+        print("🔄 [LibraryViewModel] Принудительная перезагрузка книг...")
+        loadBooks()
     }
 }
 

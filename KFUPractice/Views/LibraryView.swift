@@ -23,6 +23,26 @@ struct LibraryView: View {
                 }
                 .toolbar {
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
+                        // Меню диагностики (только в DEBUG режиме)
+                        #if DEBUG
+                        Menu {
+                            Button("📊 Диагностика") {
+                                viewModel.showDiagnosticInfo()
+                            }
+                            
+                            Button("🔄 Перезагрузить") {
+                                viewModel.forceReloadBooks()
+                            }
+                            
+                            Button("🗑️ Очистить все") {
+                                viewModel.clearAllBooks()
+                            }
+                        } label: {
+                            Image(systemName: "gear")
+                                .font(.title2)
+                        }
+                        #endif
+                        
                         // Кнопка создания демонстрационного PDF
                         Button {
                             Task {
@@ -36,12 +56,20 @@ struct LibraryView: View {
                         // Кнопка импорта файлов
                         Button {
                             showingFileImporter = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.title2)
-                        }
-                    }
-                }
+        } label: {
+            Image(systemName: "plus")
+                .font(.title2)
+        }
+    }
+}
+.onAppear {
+    // Показываем диагностику при первом появлении (только в DEBUG)
+    #if DEBUG
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        viewModel.showDiagnosticInfo()
+    }
+    #endif
+}
                 .alert("Ошибка", isPresented: .constant(viewModel.errorMessage != nil)) {
                     Button("OK") {
                         viewModel.errorMessage = nil

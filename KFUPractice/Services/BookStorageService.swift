@@ -8,45 +8,124 @@
 import Foundation
 import PDFKit
 
-/// Сервис для сохранения и загрузки книг из UserDefaults
+/// Сервис для сохранения и загрузки книг из UserDefaults и документов приложения
 class BookStorageService {
     private let userDefaults = UserDefaults.standard
-    private let booksKey = "SavedBooks"
+    private let booksKey = "KFUPractice_SavedBooks_v2" // Обновленный ключ для избежания конфликтов
     
     static let shared = BookStorageService()
     
-    private init() {}
+    private init() {
+        print("🏗️ [BookStorageService] Инициализация сервиса хранилища книг")
+        print("🏗️ [BookStorageService] Bundle ID: \(Bundle.main.bundleIdentifier ?? "unknown")")
+        print("🏗️ [BookStorageService] UserDefaults suite: \(userDefaults.description)")
+        testStorage()
+        setupBooksDirectory()
+    }
     
     // MARK: - Public Methods
     
-    /// Загрузить все сохраненные книги
+    /// Загрузить все сохраненные книги с fallback
     func loadBooks() -> [Book] {
-        guard let data = userDefaults.data(forKey: booksKey),
-              let books = try? JSONDecoder().decode([Book].self, from: data) else {
-            return []
+        print("📖 [BookStorageService] Загружаем книги из UserDefaults...")
+        print("📖 [BookStorageService] Используем ключ: \(booksKey)")
+        
+        // Сначала пытаемся загрузить из UserDefaults
+        if let books = loadBooksFromUserDefaults() {
+            print("📖 [BookStorageService] Загружено из UserDefaults: \(books.count) книг")
+            return filterExistingBooks(books)
         }
-        return books
+        
+        // Если не удалось, пытаемся загрузить из резервного файла
+        if let books = loadBooksFromBackupFile() {
+            print("📖 [BookStorageService] Загружено из резервного файла: \(books.count) книг")
+            // Восстанавливаем в UserDefaults
+            saveBooks(books)
+            return filterExistingBooks(books)
+        }
+        
+        print("📖 [BookStorageService] Книги не найдены, возвращаем пустой массив")
+        return []
     }
     
-    /// Сохранить книги
-    func saveBooks(_ books: [Book]) {
+    private func loadBooksFromUserDefaults() -> [Book]? {
+        guard let data = userDefaults.data(forKey: booksKey) else {
+            print("📖 [BookStorageService] Данные отсутствуют в UserDefaults")
+            return nil
+        }
+        
         do {
-            let data = try JSONEncoder().encode(books)
-            userDefaults.set(data, forKey: booksKey)
-            userDefaults.synchronize()
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let books = try decoder.decode([Book].self, from: data)
+            print("📖 [BookStorageService] Успешно декодировано \(books.count) книг")
+            return books
         } catch {
-            print("Ошибка сохранения книг: \(error)")
+            print("❌ [BookStorageService] Ошибка декодирования из UserDefaults: \(error)")
+            return nil
+        }
+    }
+    
+    private func filterExistingBooks(_ books: [Book]) -> [Book] {
+        let validBooks = books.filter { book in
+            bookFileExists(at: book.filePath)
+        }
+        
+        if validBooks.count != books.count {
+            print("⚠️ [BookStorageService] Отфильтровано \(books.count - validBooks.count) несуществующих файлов")
+            // Обновляем хранилище без удаленных файлов
+            saveBooks(validBooks)
+        }
+        
+        return validBooks
+    }
+    
+    /// Сохранить книги с дополнительными проверками
+    func saveBooks(_ books: [Book]) {
+        print("💾 [BookStorageService] Сохраняем \(books.count) книг в UserDefaults...")
+        print("💾 [BookStorageService] Используем ключ: \(booksKey)")
+        
+        do {
+            // Кодируем данные
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(books)
+            print("💾 [BookStorageService] Закодировано \(data.count) байт данных")
+            
+            // Сохраняем в UserDefaults
+            userDefaults.set(data, forKey: booksKey)
+            
+            // ВАЖНО: Принудительная синхронизация для симулятора
+            let success = userDefaults.synchronize()
+            print("💾 [BookStorageService] Синхронизация UserDefaults: \(success ? "✅ успешно" : "❌ ошибка")")
+            
+            // Дополнительная проверка записи в файл-дубликат
+            saveBackupToFile(books)
+            
+            // Проверяем что данные действительно сохранились
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.verifyBooksSaved(originalBooks: books)
+            }
+        } catch {
+            print("❌ [BookStorageService] Ошибка сохранения книг: \(error)")
         }
     }
     
     /// Добавить книгу
     func addBook(_ book: Book) {
+        print("💾 [BookStorageService] Добавляем книгу: \(book.title)")
+        
         var books = loadBooks()
+        print("💾 [BookStorageService] Текущее количество книг: \(books.count)")
         
         // Проверяем, что книга еще не добавлена
         if !books.contains(where: { $0.filePath == book.filePath }) {
             books.append(book)
+            print("💾 [BookStorageService] Книга добавлена в массив, новое количество: \(books.count)")
             saveBooks(books)
+            print("💾 [BookStorageService] Книги сохранены в UserDefaults")
+        } else {
+            print("⚠️ [BookStorageService] Книга уже существует по пути: \(book.filePath)")
         }
     }
     
@@ -88,18 +167,171 @@ class BookStorageService {
     
     /// Очистить все книги (для отладки)
     func clearAllBooks() {
+        print("🗑️ [BookStorageService] Очищаем все книги")
         userDefaults.removeObject(forKey: booksKey)
         userDefaults.synchronize()
+    }
+    
+    /// Тестирование работы хранилища
+    private func testStorage() {
+        print("🧪 [BookStorageService] Тестируем работу хранилища...")
+        
+        // Проверяем доступность UserDefaults
+        let testKey = "BookStorage_Test"
+        let testValue = "test_\(Date().timeIntervalSince1970)"
+        
+        userDefaults.set(testValue, forKey: testKey)
+        userDefaults.synchronize()
+        
+        if let retrievedValue = userDefaults.string(forKey: testKey), retrievedValue == testValue {
+            print("🧪 [BookStorageService] ✅ UserDefaults работает корректно")
+        } else {
+            print("🧪 [BookStorageService] ❌ Проблема с UserDefaults!")
+        }
+        
+        // Очищаем тестовый ключ
+        userDefaults.removeObject(forKey: testKey)
+        
+        // Проверяем существующие книги
+        let existingBooks = loadBooks()
+        print("🧪 [BookStorageService] Найдено \(existingBooks.count) существующих книг")
+    }
+    
+    /// Получить информацию о хранилище
+    func getStorageInfo() {
+        print("📊 [BookStorageService] Информация о хранилище:")
+        print("📊 [BookStorageService] Ключ UserDefaults: \(booksKey)")
+        
+        let books = loadBooksFromUserDefaults() ?? []
+        print("📊 - Всего книг в UserDefaults: \(books.count)")
+        
+        if let data = userDefaults.data(forKey: booksKey) {
+            print("📊 - Размер данных UserDefaults: \(data.count) байт")
+        } else {
+            print("📊 - Данные UserDefaults отсутствуют")
+        }
+        
+        // Проверяем резервный файл
+        if let backupBooks = loadBooksFromBackupFile() {
+            print("📊 - Книг в резервном файле: \(backupBooks.count)")
+        } else {
+            print("📊 - Резервный файл отсутствует")
+        }
+        
+        let documentsURL = getDocumentsDirectory()
+        let booksDirectory = documentsURL.appendingPathComponent("Books")
+        print("📊 - Путь к папке Books: \(booksDirectory.path)")
+        print("📊 - Папка Books существует: \(FileManager.default.fileExists(atPath: booksDirectory.path))")
+        
+        if FileManager.default.fileExists(atPath: booksDirectory.path) {
+            do {
+                let files = try FileManager.default.contentsOfDirectory(atPath: booksDirectory.path)
+                print("📊 - Файлов в папке Books: \(files.count)")
+                for file in files {
+                    print("📊   - \(file)")
+                }
+            } catch {
+                print("📊 - Ошибка чтения папки Books: \(error)")
+            }
+        }
+        
+        for (index, book) in books.enumerated() {
+            print("📊 - Книга \(index + 1): \(book.title) (\(book.format.displayName))")
+            print("📊   Путь: \(book.filePath)")
+            print("📊   Файл существует: \(bookFileExists(at: book.filePath))")
+        }
+    }
+    
+    // MARK: - Backup File Management
+    
+    private func saveBackupToFile(_ books: [Book]) {
+        do {
+            let documentsURL = getDocumentsDirectory()
+            let backupURL = documentsURL.appendingPathComponent("books_backup.json")
+            
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = .prettyPrinted
+            let data = try encoder.encode(books)
+            
+            try data.write(to: backupURL)
+            print("💾 [BookStorageService] Резервная копия сохранена: \(backupURL.path)")
+        } catch {
+            print("❌ [BookStorageService] Ошибка сохранения резервной копии: \(error)")
+        }
+    }
+    
+    private func loadBooksFromBackupFile() -> [Book]? {
+        do {
+            let documentsURL = getDocumentsDirectory()
+            let backupURL = documentsURL.appendingPathComponent("books_backup.json")
+            
+            guard FileManager.default.fileExists(atPath: backupURL.path) else {
+                return nil
+            }
+            
+            let data = try Data(contentsOf: backupURL)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let books = try decoder.decode([Book].self, from: data)
+            
+            print("📖 [BookStorageService] Загружено из резервного файла: \(books.count) книг")
+            return books
+        } catch {
+            print("❌ [BookStorageService] Ошибка загрузки резервной копии: \(error)")
+            return nil
+        }
+    }
+    
+    private func verifyBooksSaved(originalBooks: [Book]) {
+        print("🔍 [BookStorageService] Проверяем сохранение...")
+        
+        if let savedData = userDefaults.data(forKey: booksKey) {
+            do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let decodedBooks = try decoder.decode([Book].self, from: savedData)
+                print("🔍 [BookStorageService] Верификация: сохранено \(decodedBooks.count) книг")
+                
+                if decodedBooks.count == originalBooks.count {
+                    print("✅ [BookStorageService] Количество книг совпадает")
+                } else {
+                    print("❌ [BookStorageService] Количество книг НЕ совпадает! Было: \(originalBooks.count), стало: \(decodedBooks.count)")
+                }
+            } catch {
+                print("❌ [BookStorageService] Ошибка проверки сохраненных данных: \(error)")
+            }
+        } else {
+            print("❌ [BookStorageService] Данные НЕ найдены в UserDefaults после сохранения!")
+        }
+    }
+    
+    private func setupBooksDirectory() {
+        do {
+            let documentsURL = getDocumentsDirectory()
+            let booksDirectory = documentsURL.appendingPathComponent("Books")
+            
+            if !FileManager.default.fileExists(atPath: booksDirectory.path) {
+                try FileManager.default.createDirectory(at: booksDirectory, withIntermediateDirectories: true)
+                print("📁 [BookStorageService] Создана папка Books: \(booksDirectory.path)")
+            } else {
+                print("📁 [BookStorageService] Папка Books уже существует: \(booksDirectory.path)")
+            }
+        } catch {
+            print("❌ [BookStorageService] Ошибка создания папки Books: \(error)")
+        }
     }
 }
 
 // MARK: - File Management Extensions
 
 extension BookStorageService {
-    /// Копировать файл книги в документы приложения
+    /// Копировать файл книги в документы приложения с улучшенной обработкой
     func copyBookToDocuments(from sourceURL: URL) -> URL? {
+        print("📁 [BookStorageService] Копируем файл: \(sourceURL.lastPathComponent)")
+        
         guard sourceURL.startAccessingSecurityScopedResource() else {
-            print("Нет доступа к файлу: \(sourceURL)")
+            print("❌ [BookStorageService] Нет доступа к файлу: \(sourceURL)")
             return nil
         }
         defer { sourceURL.stopAccessingSecurityScopedResource() }
@@ -111,29 +343,46 @@ extension BookStorageService {
             
             if !FileManager.default.fileExists(atPath: booksDirectory.path) {
                 try FileManager.default.createDirectory(at: booksDirectory, withIntermediateDirectories: true)
+                print("📁 [BookStorageService] Создана папка Books")
             }
             
-            // Создаем уникальное имя файла
-            let fileName = sourceURL.lastPathComponent
-            let destinationURL = booksDirectory.appendingPathComponent(fileName)
+            // Создаем уникальное имя файла с timestamp для избежания конфликтов
+            let originalFileName = sourceURL.lastPathComponent
+            let nameWithoutExtension = sourceURL.deletingPathExtension().lastPathComponent
+            let fileExtension = sourceURL.pathExtension
+            let timestamp = Int(Date().timeIntervalSince1970)
             
-            // Если файл уже существует, добавляем номер
-            var finalDestination = destinationURL
-            var counter = 1
-            while FileManager.default.fileExists(atPath: finalDestination.path) {
-                let nameWithoutExtension = sourceURL.deletingPathExtension().lastPathComponent
-                let fileExtension = sourceURL.pathExtension
-                let newFileName = "\(nameWithoutExtension)_\(counter).\(fileExtension)"
-                finalDestination = booksDirectory.appendingPathComponent(newFileName)
-                counter += 1
+            // Формат: OriginalName_timestamp.ext
+            let uniqueFileName = "\(nameWithoutExtension)_\(timestamp).\(fileExtension)"
+            let destinationURL = booksDirectory.appendingPathComponent(uniqueFileName)
+            
+            print("📁 [BookStorageService] Целевой путь: \(destinationURL.path)")
+            
+            // Проверяем что целевой файл не существует (маловероятно с timestamp, но на всякий случай)
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+                print("📁 [BookStorageService] Удален существующий файл")
             }
             
             // Копируем файл
-            try FileManager.default.copyItem(at: sourceURL, to: finalDestination)
-            return finalDestination
+            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            print("✅ [BookStorageService] Файл успешно скопирован: \(destinationURL.lastPathComponent)")
+            
+            // Проверяем что файл действительно скопировался
+            let fileExists = FileManager.default.fileExists(atPath: destinationURL.path)
+            print("📁 [BookStorageService] Проверка существования файла: \(fileExists)")
+            
+            if fileExists {
+                let fileSize = getFileSize(at: destinationURL.path)
+                print("📁 [BookStorageService] Размер скопированного файла: \(fileSize) байт")
+                return destinationURL
+            } else {
+                print("❌ [BookStorageService] Файл не найден после копирования!")
+                return nil
+            }
             
         } catch {
-            print("Ошибка копирования файла: \(error)")
+            print("❌ [BookStorageService] Ошибка копирования файла: \(error)")
             return nil
         }
     }
