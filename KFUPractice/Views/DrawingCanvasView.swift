@@ -128,8 +128,8 @@ struct DrawingCanvasView: View {
                         .transition(.move(edge: .leading))
                     Spacer()
                 }
-                .background(Color.white)
-                .ignoresSafeArea()
+//                .background(Color.white)
+//                .ignoresSafeArea()
             }
 
         }
@@ -293,7 +293,7 @@ struct DrawingCanvasView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(.regularMaterial)
+                .fill(Color.white)
 //                .shadow(radius: 10)
         )
         .frame(width: 180)
