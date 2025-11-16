@@ -13,128 +13,184 @@ struct ReadingView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showNavigationBar = true
     @State private var lastTapTime = Date()
-    
+
     init(book: Book) {
         self._viewModel = StateObject(wrappedValue: ReadingViewModel(book: book))
     }
     
     var body: some View {
         GeometryReader { geometry in
-            ZStack {
-                // Фон с учетом темы
-                viewModel.readingSettings.theme.backgroundColor
-                    .ignoresSafeArea()
+            VStack(spacing: 0) {
+                // Заголовок (скрывается при чтении)
+                if showNavigationBar {
+                    headerView
+                        .transition(.move(edge: .top))
+                }
                 
-                VStack(spacing: 0) {
-                    // Заголовок (скрывается при чтении)
-                    if showNavigationBar {
-                        headerView
-                            .transition(.move(edge: .top))
-                    }
-                    
-                    // Основной контент
-                    contentView
-                    
-                    // Панель навигации (скрывается при чтении)
-                    if showNavigationBar {
-                        navigationView
-                            .transition(.move(edge: .bottom))
-                    }
+                // Основной контент
+                contentView()
+                
+                // Панель навигации (скрывается при чтении)  
+                if showNavigationBar {
+                    navigationView
+                        .transition(.move(edge: .bottom))
                 }
             }
+            .background {
+                viewModel.readingSettings.theme.backgroundColor
+                    .ignoresSafeArea(.all, edges: .all)
+            }
+            .overlay(
+                // Действия с выделенным текстом
+                Group {
+                    if viewModel.showExplanation {
+                        Color.black.opacity(0.3)
+                            .ignoresSafeArea(.all)
+                            .onTapGesture {
+                                viewModel.clearSelection()
+                            }
+                        
+                        TextSelectionActionsView(
+                            selectedText: viewModel.selectedText,
+                            onCopy: {
+                                ClipboardManager.copy(viewModel.selectedText)
+                            },
+                            onAskAI: {
+                                viewModel.askAIAboutSelectedText()
+                            },
+                            onDismiss: {
+                                viewModel.clearSelection()
+                            }
+                        )
+                        .frame(maxWidth: min(geometry.size.width - 32, 400))
+                        .padding(.horizontal, 16)
+                        .padding(.top, geometry.safeAreaInsets.top + 60)
+                        .padding(.bottom, geometry.safeAreaInsets.bottom + 60)
+                    }
+                }
+            )
         }
         .navigationBarHidden(true)
+        .onAppear {
+            // Принудительно обновляем UI при появлении для корректного отображения настроек
+            Task { @MainActor in
+                // Если данные уже загружены, убеждаемся что currentPageContent актуальный
+                if !viewModel.pages.isEmpty && viewModel.currentPageContent.isEmpty {
+                    viewModel.refreshCurrentPageContent() // Синхронный вызов для обновления контента
+                }
+                viewModel.objectWillChange.send()
+            }
+        }
         .onTapGesture {
             handleTap()
         }
         .sheet(isPresented: $viewModel.showSettingsPanel) {
             ReadingSettingsView(settings: $viewModel.readingSettings)
         }
-        .overlay(
-            // AI объяснение
-            Group {
-                if viewModel.showExplanation {
-                    ExplanationPopoverView(
-                        selectedText: viewModel.selectedText,
-                        onDismiss: viewModel.clearSelection
-                    )
-                }
-            }
-        )
+        .refreshable {
+            viewModel.id = .init()
+        }
+        .id(viewModel.id)
     }
     
     // MARK: - Header View
     
     private var headerView: some View {
-        HStack {
+        HStack(spacing: 16) {
             Button {
                 dismiss()
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .medium))
                     Text("Библиотека")
+                        .font(.system(size: 17))
                 }
                 .foregroundColor(.primary)
             }
             
-            Spacer()
+            Spacer(minLength: 8)
             
-            VStack(alignment: .trailing, spacing: 2) {
+            VStack(alignment: .center, spacing: 2) {
                 Text(viewModel.book.title)
                     .font(.headline)
                     .lineLimit(1)
+                    .truncationMode(.tail)
                 
                 if let author = viewModel.book.author {
                     Text(author)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
             }
+            .frame(maxWidth: .infinity)
             
-            Spacer()
+            Spacer(minLength: 8)
             
             Button {
                 viewModel.showSettingsPanel = true
             } label: {
                 Image(systemName: "textformat.size")
+                    .font(.system(size: 20))
                     .foregroundColor(.primary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color(.systemBackground))
-        .shadow(radius: 1)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            Color(.systemBackground)
+                .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: 1)
+        )
+        .safeAreaInset(edge: .top) {
+            Rectangle()
+                .fill(Color(.systemBackground))
+                .frame(height: 0)
+        }
     }
     
     // MARK: - Content View
-    
-    private var contentView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if viewModel.isLoading {
-                    loadingView
-                } else if let error = viewModel.errorMessage {
-                    errorView(error)
-                } else {
-                    textContentView
+    @ViewBuilder
+    private func contentView() -> some View {
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if viewModel.isLoading {
+                        loadingView
+                    } else if viewModel.isChangingPage {
+                        pageChangingView
+                    } else if let error = viewModel.errorMessage {
+                        errorView(error)
+                    } else {
+                        textContentView()
+                    }
                 }
+                .frame(minHeight: geometry.size.height)
             }
+            .padding(.horizontal, max(16, viewModel.readingSettings.horizontalPadding))
+            .clipped()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, viewModel.readingSettings.horizontalPadding)
     }
-    
-    private var textContentView: some View {
-        SelectableText(
-            text: viewModel.currentPageContent,
-            font: viewModel.readingSettings.font,
-            textColor: viewModel.readingSettings.theme.textColor,
-            lineSpacing: viewModel.readingSettings.lineSpacing,
+    @ViewBuilder
+    private func textContentView() -> some View {
+        UniversalSelectableText(
+            text: $viewModel.currentPageContent,
+            settings: $viewModel.readingSettings,
             onTextSelected: { selectedText in
                 viewModel.selectText(selectedText)
+            },
+            onSettingsChanged: {
+                // Принудительно обновляем UI при изменении настроек
+                Task { @MainActor in
+                    viewModel.objectWillChange.send()
+                }
             }
         )
-        .padding(.vertical, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 40) // Extra bottom padding for comfortable reading
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     private var loadingView: some View {
@@ -144,9 +200,23 @@ struct ReadingView: View {
             
             Text("Загрузка страницы...")
                 .font(.caption)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, 100)
+    }
+    
+    private var pageChangingView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle())
+                .scaleEffect(0.8)
+            
+            Text("Переход на страницу \(viewModel.currentPageNumber + 1)")
+                .font(.caption)
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, 80)
     }
     
     private func errorView(_ error: String) -> some View {
@@ -177,26 +247,38 @@ struct ReadingView: View {
     // MARK: - Navigation View
     
     private var navigationView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 12) {
             // Прогресс-бар
             progressBarView
+                .padding(.horizontal, 16)
             
             // Кнопки навигации
-            HStack {
+            HStack(spacing: 20) {
                 Button {
                     viewModel.previousPage()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.title2)
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundColor(viewModel.currentPageNumber == 0 ? .secondary : .primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .disabled(viewModel.currentPageNumber == 0)
                 
                 Spacer()
                 
                 // Индикатор страниц
-                Text("\(viewModel.currentPageNumber + 1) из \(viewModel.totalPages)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                VStack(spacing: 4) {
+                    Text("\(viewModel.currentPageNumber + 1) из \(viewModel.totalPages)")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.primary)
+                    
+                    if let pageCount = viewModel.book.pageCount {
+                        Text("Всего \(pageCount) стр.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
                 
                 Spacer()
                 
@@ -204,38 +286,48 @@ struct ReadingView: View {
                     viewModel.nextPage()
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.title2)
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundColor(viewModel.currentPageNumber >= viewModel.totalPages - 1 ? .secondary : .primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .disabled(viewModel.currentPageNumber >= viewModel.totalPages - 1)
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 16)
         }
-        .padding(.vertical, 8)
-        .background(Color(.systemBackground))
-        .shadow(radius: 1)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+        .background(
+            Color(.systemBackground)
+                .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: -1)
+        )
+        .safeAreaInset(edge: .bottom) {
+            Rectangle()
+                .fill(Color(.systemBackground))
+                .frame(height: 0)
+        }
     }
     
     private var progressBarView: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 8) {
             ProgressView(value: viewModel.readingProgress)
-                .progressViewStyle(LinearProgressViewStyle())
-                .frame(height: 4)
+                .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
+                .frame(height: 3)
+                .background(Color(.systemGray5))
+                .cornerRadius(1.5)
             
             HStack {
-//                Text("\(Int(viewModel.readingProgress * 100))%")
-//                    .font(.caption2)
-//                    .foregroundColor(.secondary)
+                Text("\(Int(viewModel.readingProgress * 100))%")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
                 
                 Spacer()
                 
-                if let pageCount = viewModel.book.pageCount {
-                    Text("\(pageCount) стр.")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
+                Text("Прогресс чтения")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
         }
-        .padding(.horizontal)
     }
     
     // MARK: - Interaction Handling
@@ -250,41 +342,6 @@ struct ReadingView: View {
             withAnimation(.easeInOut(duration: 0.3)) {
                 showNavigationBar.toggle()
             }
-        }
-    }
-}
-
-// MARK: - Selectable Text View
-
-/// Компонент для отображения текста с возможностью выделения
-struct SelectableText: View {
-    let text: String
-    let font: Font
-    let textColor: Color
-    let lineSpacing: CGFloat
-    let onTextSelected: (String) -> Void
-    
-    @State private var selectedRange: NSRange?
-    
-    var body: some View {
-        Text(text)
-            .font(font)
-            .foregroundColor(textColor)
-            .lineSpacing(lineSpacing)
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .onReceive(NotificationCenter.default.publisher(for: UIMenuController.didShowMenuNotification)) { _ in
-                // Когда появляется контекстное меню, можем обработать выделенный текст
-                handleTextSelection()
-            }
-    }
-    
-    private func handleTextSelection() {
-        // TODO: Получить выделенный текст
-        // Пока используем заглушку
-        let selectedText = "выделенный текст" // Заглушка
-        if !selectedText.isEmpty {
-            onTextSelected(selectedText)
         }
     }
 }
@@ -409,67 +466,6 @@ struct ReadingSettingsView: View {
             .background(settings.theme.backgroundColor)
             .foregroundColor(settings.theme.textColor)
             .cornerRadius(8)
-    }
-}
-
-// MARK: - Explanation Popover
-
-/// Всплывающее окно с AI объяснением
-struct ExplanationPopoverView: View {
-    let selectedText: String
-    let onDismiss: () -> Void
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("AI Объяснение")
-                    .font(.headline)
-                
-                Spacer()
-                
-                Button {
-                    onDismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Text("Выделенный текст:")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            Text(selectedText)
-                .font(.body)
-                .padding(.vertical, 4)
-            
-            Divider()
-            
-            // TODO: Здесь будет реальное объяснение от AI
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .accentColor))
-                        .scaleEffect(0.8)
-                    
-                    Text("Получаем объяснение от AI...")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                // TODO: Заменить на реальный контент от Gemini API
-                Text("Здесь будет объяснение от AI после интеграции с Gemini API")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .italic()
-            }
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 8)
-        .frame(maxWidth: 300)
-        .padding()
     }
 }
 

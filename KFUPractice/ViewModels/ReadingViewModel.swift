@@ -14,11 +14,21 @@ import PDFKit
 @MainActor
 class ReadingViewModel: ObservableObject {
     // MARK: - Published Properties
-    
-    @Published var currentPageNumber: Int = 0
-    @Published var pages: [String] = []
+    @Published var id: UUID = .init()
+    @Published var currentPageNumber: Int = 0 {
+        didSet {
+            updateCurrentPageContent()
+        }
+    }
+    @Published var pages: [String] = [] {
+        didSet {
+            updateCurrentPageContent()
+        }
+    }
+    @Published var currentPageContent: String = ""
     @Published var fullContent: String = ""
     @Published var isLoading: Bool = false
+    @Published var isChangingPage: Bool = false  // Новое состояние для смены страниц
     @Published var errorMessage: String?
     
     // MARK: - AI и математические функции
@@ -72,6 +82,13 @@ class ReadingViewModel: ObservableObject {
         print("   • book.format: \(book.format)")
         print("   • book.filePath: \(book.filePath)")
         
+        // Принудительно уведомляем об изменении настроек для корректного первичного отображения
+        Task { @MainActor in
+            self.objectWillChange.send()
+            // НЕ вызываем updateCurrentPageContent() здесь, так как pages еще пустой
+        }
+        
+        // Запускаем загрузку контента
         loadBookContent()
     }
     
@@ -112,6 +129,12 @@ class ReadingViewModel: ObservableObject {
                 await MainActor.run {
                     self.isLoading = false
                     print("✅ [ReadingViewModel] loadBookContent finished. pages.count = \(self.pages.count)")
+                    
+                    // ВАЖНО: Обновляем текущую страницу ПОСЛЕ загрузки данных
+                    self.updateCurrentPageContent()
+                    
+                    // Принудительно обновляем настройки для корректного отображения
+                    self.objectWillChange.send()
                 }
             } catch {
                 await MainActor.run {
@@ -413,6 +436,7 @@ class ReadingViewModel: ObservableObject {
     func nextPage() {
         print("➡️ [ReadingViewModel] nextPage() tapped. currentPageNumber = \(currentPageNumber)")
         if currentPageNumber < pages.count - 1 {
+            isChangingPage = true  // Начинаем смену страницы
             currentPageNumber += 1
             print("   • new currentPageNumber = \(currentPageNumber)")
             if book.format == .epub {
@@ -426,7 +450,9 @@ class ReadingViewModel: ObservableObject {
     func previousPage() {
         print("⬅️ [ReadingViewModel] previousPage() tapped. currentPageNumber = \(currentPageNumber)")
         if currentPageNumber > 0 {
+            isChangingPage = true  // Начинаем смену страницы
             currentPageNumber -= 1
+            id = .init()
             print("   • new currentPageNumber = \(currentPageNumber)")
             if book.format == .epub {
                 updateCurrentChapterInfo()
@@ -439,6 +465,7 @@ class ReadingViewModel: ObservableObject {
     func goToPage(_ pageNumber: Int) {
         print("🔢 [ReadingViewModel] goToPage(\(pageNumber)) called. pages.count = \(pages.count)")
         if pageNumber >= 0 && pageNumber < pages.count {
+            isChangingPage = true  // Начинаем смену страницы
             currentPageNumber = pageNumber
             print("   • currentPageNumber set to \(currentPageNumber)")
             if book.format == .epub {
@@ -462,9 +489,26 @@ class ReadingViewModel: ObservableObject {
     
     // MARK: - Current Page Content
     
-    var currentPageContent: String {
-        guard currentPageNumber < pages.count && currentPageNumber >= 0 else { return "" }
-        return pages[currentPageNumber]
+    private func updateCurrentPageContent() {
+        guard currentPageNumber < pages.count && currentPageNumber >= 0 else { 
+            currentPageContent = ""
+            isChangingPage = false  // Завершаем смену страницы даже при ошибке
+            return 
+        }
+        
+        // Имитируем небольшую задержку для правильного отображения ProgressView
+        Task { @MainActor in
+            // Небольшая задержка для обеспечения видимости ProgressView
+            try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+            
+            self.currentPageContent = self.pages[self.currentPageNumber]
+            self.isChangingPage = false  // Завершаем смену страницы
+            
+            // Принудительно уведомляем об изменении для правильного layout текста
+            self.objectWillChange.send()
+            
+            print("✅ [ReadingViewModel] updateCurrentPageContent() completed. page \(self.currentPageNumber) content length: \(self.currentPageContent.count)")
+        }
     }
     
     var totalPages: Int {
@@ -649,13 +693,35 @@ class ReadingViewModel: ObservableObject {
     }
     
     func loadCurrentPage() async {
-        // Метод уже загружается в loadBookContent(), этот метод для совместимости с UI
-        return
+        // Обновляем контент текущей страницы если данные уже загружены
+        await MainActor.run {
+            self.updateCurrentPageContent()
+            self.objectWillChange.send()
+        }
+    }
+    
+    /// Публичный метод для принудительного обновления контента текущей страницы
+    func refreshCurrentPageContent() {
+        isChangingPage = true
+        updateCurrentPageContent()
+        objectWillChange.send()
     }
     
     func clearSelection() {
         selectedText = ""
         showExplanation = false
+    }
+    
+    func askAIAboutSelectedText() {
+        // TODO: В будущем здесь будет интеграция с AI API
+        // Пока просто логгируем выбранный текст
+        print("📖 Пользователь хочет спросить ИИ о тексте: '\(selectedText)'")
+        
+        // Можно добавить аналитику или подготовку для будущего API
+        // например, сохранить запрос в базу данных для последующей обработки
+        
+        // Закрываем панель выделения
+        clearSelection()
     }
 }
 
