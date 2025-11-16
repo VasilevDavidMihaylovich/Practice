@@ -38,13 +38,13 @@ struct AreaSelectionView: View {
         GeometryReader { geometry in
             ZStack {
                 // Полупрозрачный фон (не полностью затемненный, чтобы видеть PDF)
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation {
-                            isPresented = false
-                        }
-                    }
+//                Color.black.opacity(0.3)
+//                    .ignoresSafeArea()
+//                    .onTapGesture {
+//                        withAnimation {
+//                            isPresented = false
+//                        }
+//                    }
                 
                 // Выбранная область с рамкой
                 selectionFrame(geometry: geometry)
@@ -100,14 +100,18 @@ struct AreaSelectionView: View {
     @ViewBuilder
     private func selectionFrame(geometry: GeometryProxy) -> some View {
         ZStack {
+            Color.black.opacity(0.1)
             // Вырезанная область (прозрачная)
             Path { path in
                 let screenRect = geometry.frame(in: .local)
                 path.addRect(screenRect)
                 path.addRect(selectionRect)
             }
-            .fill(style: FillStyle(eoFill: true))
-            .fill(Color.black.opacity(0.5))
+            .fill(
+                Color.black.opacity(0.4),      // <- тут любой цвет и opacity
+                style: FillStyle(eoFill: true)
+            )
+//            .fill(Color.white.opacity(0.1))
             
             // Рамка выбранной области
             RoundedRectangle(cornerRadius: 8)
@@ -121,6 +125,7 @@ struct AreaSelectionView: View {
             // Углы для изменения размера
             resizeCorners
         }
+        
     }
     
     // MARK: - Resize Corners
