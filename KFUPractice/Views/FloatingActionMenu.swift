@@ -100,6 +100,7 @@ struct FloatingActionMenu: View {
                     }
                     .padding(.trailing, 20)
                     .padding(.bottom, 130)
+//                    .opacity(showNavigationBar ? 1 : 0)
                 }
             }
         }
@@ -127,12 +128,12 @@ struct FloatingActionMenu: View {
                         )
                     )
                     .frame(width: 60, height: 60)
-                    .shadow(
-                        color: Color.purple.opacity(0.4),
-                        radius: isExpanded ? 20 : 10,
-                        x: 0,
-                        y: isExpanded ? 5 : 2
-                    )
+//                    .shadow(
+//                        color: Color.purple.opacity(0.4),
+//                        radius: isExpanded ? 20 : 10,
+//                        x: 0,
+//                        y: isExpanded ? 5 : 2
+//                    )
                 
                 // Иконка магической палочки с эффектом свечения
                 Image(systemName: isExpanded ? "xmark" : "wand.and.stars")
@@ -140,7 +141,7 @@ struct FloatingActionMenu: View {
                     .foregroundColor(.white)
                     .rotationEffect(.degrees(isExpanded ? 180 : 0))
                     .scaleEffect(isExpanded ? 0.85 : 1.0)
-                    .shadow(color: Color.white.opacity(0.5), radius: 4)
+//                    .shadow(color: Color.white.opacity(0.5), radius: 4)
             }
         }
         .buttonStyle(ScaleButtonStyle())
@@ -205,13 +206,13 @@ struct FloatingActionMenu: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(.systemBackground))
-                    .shadow(
-                        color: Color.black.opacity(0.15),
-                        radius: 10,
-                        x: 0,
-                        y: 5
-                    )
+                    .fill(Color(.white))
+//                    .shadow(
+//                        color: Color.black.opacity(0.15),
+//                        radius: 10,
+//                        x: 0,
+//                        y: 5
+//                    )
             )
             .frame(width: 190)
         }

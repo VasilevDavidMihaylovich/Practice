@@ -194,7 +194,7 @@ struct LibraryView: View {
             if viewModel.isLoading {
                 ProgressView("Загрузка книг...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(.systemBackground).opacity(0.8))
+                    .background(Color(.white).opacity(0.8))
             }
         }
     }
@@ -584,7 +584,7 @@ struct BookCardView: View {
         .frame(height: 240)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
+                .fill(Color(.white))
                 .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         )
     }

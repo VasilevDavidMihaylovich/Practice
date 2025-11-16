@@ -356,8 +356,8 @@ struct TextSelectionActionsView: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color(UIColor.systemBackground))
-                .shadow(radius: 10)
+                .fill(Color.white)
+//                .shadow(radius: 10)
         )
     }
 }

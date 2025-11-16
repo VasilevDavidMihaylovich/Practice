@@ -77,7 +77,7 @@ struct DrawingCanvasView: View {
                         }
                     }
             )
-            
+            .ignoresSafeArea()
             // Компактная панель инструментов (плавающая)
             VStack {
                 HStack {
@@ -104,20 +104,23 @@ struct DrawingCanvasView: View {
                     } label: {
                         Image(systemName: "slider.horizontal.3")
                             .font(.title)
-                            .foregroundColor(.white)
-                            .background(Circle().fill(Color.blue.opacity(0.8)))
+                            .foregroundColor(Color.black.opacity(0.6))
                     }
                 }
+                .background(Color.white)
                 .padding(.horizontal, 20)
                 .padding(.top, 50)
+                .background(Color.white)
                 
                 Spacer()
                 
                 // Нижняя панель инструментов
                 compactToolsPanel
+                    .background(Color.white)
                     .padding(.bottom, 30)
+                    .background(Color.white)
             }
-            
+            .ignoresSafeArea()
             // Панель настроек кисти (сбоку)
             if showBrushSettings {
                 HStack {
@@ -125,7 +128,10 @@ struct DrawingCanvasView: View {
                         .transition(.move(edge: .leading))
                     Spacer()
                 }
+                .background(Color.white)
+                .ignoresSafeArea()
             }
+
         }
         .onAppear {
             // Загружаем существующие штрихи если есть
@@ -197,11 +203,11 @@ struct DrawingCanvasView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(
-            Capsule()
-                .fill(Color.black.opacity(0.3))
-                .blur(radius: 10)
-        )
+//        .background(
+//            Capsule()
+//                .fill(Color.black.opacity(0.3))
+//                .blur(radius: 10)
+//        )
     }
     
     // MARK: - Brush Settings Panel
@@ -288,7 +294,7 @@ struct DrawingCanvasView: View {
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(.regularMaterial)
-                .shadow(radius: 10)
+//                .shadow(radius: 10)
         )
         .frame(width: 180)
         .padding(.leading, 20)

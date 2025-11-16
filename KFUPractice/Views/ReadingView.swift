@@ -54,19 +54,22 @@ struct ReadingView: View {
     private var mainContent: some View {
         VStack(spacing: 0) {
             // Заголовок (скрывается при чтении)
-            if showNavigationBar {
-                headerView
-                    .transition(.move(edge: .top))
-            }
-            
+//            if showNavigationBar {
+//
+//            }
+            headerView
+//                .transition(.move(edge: .top))
+                .opacity(showNavigationBar ? 1 : 0)
             // Основной контент
             contentView()
             
             // Панель навигации (скрывается при чтении)  
-            if showNavigationBar {
-                navigationView
-                    .transition(.move(edge: .bottom))
-            }
+//            if showNavigationBar {
+//
+//            }
+            navigationView
+                .opacity(showNavigationBar ? 1 : 0)
+//                .transition(.move(edge: .bottom))
         }
         .background {
             viewModel.readingSettings.theme.backgroundColor
@@ -375,34 +378,15 @@ struct ReadingView: View {
             }
             .opacity(viewModel.book.format == .txt ? 1 : 0)
         }
-        .overlay(content: {
-            VStack(alignment: .center, spacing: 2) {
-                Text(viewModel.book.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .minimumScaleFactor(0.3)
-                
-                if let author = viewModel.book.author {
-                    Text(author)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.3)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 30)
-        })
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(
-            Color(.systemBackground)
-                .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: 1)
-        )
+//        .background(
+//            Color(.systemBackground)
+//                .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: 1)
+//        )
         .safeAreaInset(edge: .top) {
             Rectangle()
-                .fill(Color(.systemBackground))
+                .fill(Color(.white))
                 .frame(height: 0)
         }
     }
@@ -572,13 +556,13 @@ struct ReadingView: View {
         }
         .padding(.top, 12)
         .padding(.bottom, 16)
-        .background(
-            Color(.systemBackground)
-                .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: -1)
-        )
+//        .background(
+//            Color(.systemBackground)
+//                .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: -1)
+//        )
         .safeAreaInset(edge: .bottom) {
             Rectangle()
-                .fill(Color(.systemBackground))
+                .fill(Color.white)
                 .frame(height: 0)
         }
     }

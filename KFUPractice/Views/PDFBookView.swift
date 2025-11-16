@@ -58,12 +58,12 @@ struct PDFBookView: View {
                             .offset(x: dragOffset)
                             .scaleEffect(isDragging ? 0.98 : 1.0)
                             .zIndex(2)
-                            .shadow(
-                                color: Color.black.opacity(isDragging ? 0.3 : 0.2),
-                                radius: isDragging ? 20 : 10,
-                                x: isDragging ? dragOffset * 0.1 : 0,
-                                y: 5
-                            )
+//                            .shadow(
+//                                color: Color.black.opacity(isDragging ? 0.3 : 0.2),
+//                                radius: isDragging ? 20 : 10,
+//                                x: isDragging ? dragOffset * 0.1 : 0,
+//                                y: 5
+//                            )
                     }
                     
                     // Следующая страница (справа)
@@ -112,12 +112,12 @@ struct PDFBookView: View {
                 PDFPageView(page: page, scale: calculateScale(for: pageGeometry.size))
                     .background(Color.white)
                     .cornerRadius(4)
-                    .shadow(
-                        color: Color.black.opacity(0.15),
-                        radius: 8,
-                        x: 0,
-                        y: 4
-                    )
+//                    .shadow(
+//                        color: Color.black.opacity(0.15),
+//                        radius: 8,
+//                        x: 0,
+//                        y: 4
+//                    )
             }
         } else {
             Color.white

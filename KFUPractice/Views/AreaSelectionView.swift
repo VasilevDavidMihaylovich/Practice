@@ -219,7 +219,7 @@ struct AreaSelectionView: View {
                 Circle()
                     .stroke(Color.white, lineWidth: 2)
             )
-            .shadow(radius: 4)
+//            .shadow(radius: 4)
     }
     
     // MARK: - Buttons
@@ -249,7 +249,7 @@ struct AreaSelectionView: View {
                 )
             )
             .cornerRadius(12)
-            .shadow(color: Color.blue.opacity(0.4), radius: 10, x: 0, y: 5)
+//            .shadow(color: Color.blue.opacity(0.4), radius: 10, x: 0, y: 5)
         }
         .buttonStyle(ScaleButtonStyle())
     }
