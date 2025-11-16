@@ -48,6 +48,11 @@ class ReadingViewModel: ObservableObject {
     @Published var showSettingsPanel = false
     @Published var showExplanation = false
     
+    // MARK: - Drawing Support
+    @Published var showDrawingCanvas = false
+    @Published var pageDrawings: [Int: PageDrawing] = [:]
+    @Published var currentPageDrawing: PageDrawing?
+    
     // MARK: - EPUB Support
     
     @Published var epubDocument: EPUBDocument?
@@ -139,6 +144,9 @@ class ReadingViewModel: ObservableObject {
                     
                     // Принудительно обновляем настройки для корректного отображения
                     self.objectWillChange.send()
+                    
+                    // Загружаем сохраненные рисунки для книги
+                    self.loadPageDrawings()
                 }
             } catch {
                 await MainActor.run {
@@ -518,6 +526,18 @@ class ReadingViewModel: ObservableObject {
     // MARK: - Current Page Content
     
     private func updateCurrentPageContent() {
+        print("🔄 [ReadingViewModel] updateCurrentPageContent() called. currentPageNumber: \(currentPageNumber)")
+        
+        isChangingPage = true  // Начинаем смену страницы
+        
+        // Закрываем холст рисования при смене страницы
+        if showDrawingCanvas {
+            showDrawingCanvas = false
+        }
+        
+        // Загружаем рисунок для новой страницы
+        loadCurrentPageDrawing()
+        
         // Для PDF не обновляем текстовый контент, так как страницы отображаются как изображения
         if book.format == .pdf {
             isChangingPage = false
@@ -761,6 +781,140 @@ class ReadingViewModel: ObservableObject {
         // Закрываем панель выделения
         clearSelection()
     }
+    
+    // MARK: - Drawing Management
+    
+    /// Показать холст для рисования
+    func startDrawing() {
+        showDrawingCanvas = true
+        loadCurrentPageDrawing()
+    }
+    
+    /// Скрыть холст рисования
+    func stopDrawing() {
+        showDrawingCanvas = false
+    }
+    
+    /// Загрузить рисунок для текущей страницы
+    private func loadCurrentPageDrawing() {
+        if let existingDrawing = pageDrawings[currentPageNumber] {
+            currentPageDrawing = existingDrawing
+        } else {
+            // Создаем новый рисунок для страницы
+            currentPageDrawing = PageDrawing(bookId: book.id, pageNumber: currentPageNumber)
+        }
+    }
+    
+    /// Сохранить рисунок для текущей страницы
+    func saveDrawing(strokes: [DrawingStroke]) {
+        guard var drawing = currentPageDrawing else { return }
+        
+        // Обновляем штрихи в рисунке
+        drawing.strokes = strokes
+        
+        // Сохраняем в словарь
+        if strokes.isEmpty {
+            pageDrawings.removeValue(forKey: currentPageNumber)
+        } else {
+            pageDrawings[currentPageNumber] = drawing
+        }
+        
+        // Обновляем текущий рисунок
+        currentPageDrawing = strokes.isEmpty ? nil : drawing
+        
+        // Сохраняем в BookStorage
+        BookStorageService.shared.savePageDrawings(pageDrawings, for: book.id)
+        
+        // Скрываем холст
+        stopDrawing()
+        
+        print("💾 [ReadingViewModel] Сохранен рисунок для страницы \(currentPageNumber) с \(strokes.count) штрихами")
+    }
+    
+    /// Очистить рисунок для текущей страницы
+    func clearCurrentPageDrawing() {
+        pageDrawings.removeValue(forKey: currentPageNumber)
+        currentPageDrawing = nil
+        
+        // Сохраняем изменения
+        BookStorageService.shared.savePageDrawings(pageDrawings, for: book.id)
+        
+        // Скрываем холст
+        stopDrawing()
+        
+        print("🗑️ [ReadingViewModel] Очищен рисунок для страницы \(currentPageNumber)")
+    }
+    
+    /// Загрузить все рисунки для книги
+    func loadPageDrawings() {
+        pageDrawings = BookStorageService.shared.loadPageDrawings(for: book.id)
+        loadCurrentPageDrawing()
+        
+        print("📝 [ReadingViewModel] Загружено \(pageDrawings.count) рисунков для книги")
+    }
+    
+    /// Получить рисунок для конкретной страницы
+    func getDrawing(for pageNumber: Int) -> PageDrawing? {
+        return pageDrawings[pageNumber]
+    }
+    
+    // MARK: - Screenshot Functionality
+    
+    /// Создать скриншот содержимого и подготовить для отправки ИИ
+    func captureScreenshot(screenshot: UIImage) {
+        Task {
+            await processScreenshot(screenshot)
+        }
+    }
+    
+    @MainActor
+    private func processScreenshot(_ screenshot: UIImage) async {
+        print("📸 [ReadingViewModel] Обработка скриншота...")
+        print("🖼️ [ReadingViewModel] Размер: \(screenshot.size)")
+        print("📄 [ReadingViewModel] Текущая страница: \(currentPageNumber + 1)")
+        print("📖 [ReadingViewModel] Книга: \(book.title)")
+        print("📱 [ReadingViewModel] Формат: \(book.format)")
+        
+        // Подготавливаем данные для отправки ИИ
+        let aiRequest = ScreenshotAIRequest(
+            image: screenshot,
+            pageNumber: currentPageNumber + 1,
+            bookTitle: book.title,
+            bookFormat: book.format.rawValue,
+            textContent: currentPageContent.isEmpty ? "Содержимое недоступно" : String(currentPageContent.prefix(500)) + "..."
+        )
+        
+        // Мок отправки ИИ
+        await sendScreenshotToAI(aiRequest)
+    }
+    
+    /// Мок отправки скриншота ИИ
+    private func sendScreenshotToAI(_ request: ScreenshotAIRequest) async {
+        print("\n🤖 [AI REQUEST] Отправка скриншота ИИ:")
+        print("📚 Книга: \(request.bookTitle)")
+        print("📄 Страница: \(request.pageNumber)")
+        print("📱 Формат: \(request.bookFormat)")
+        print("🖼️ Размер изображения: \(request.image.size)")
+        print("📝 Фрагмент текста: \(request.textContent)")
+        print("\n💭 Примерный промпт для ИИ:")
+        print("\"Проанализируй содержимое этой страницы из книги '\(request.bookTitle)' (страница \(request.pageNumber), формат \(request.bookFormat)). На изображении показан контент: '\(request.textContent)'. Пожалуйста, объясни основные концепции, выдели ключевые моменты и предложи вопросы для понимания материала.\"")
+        print("\n✅ [AI REQUEST] Скриншот готов для отправки ИИ")
+        print("💾 [GALLERY] Изображение также сохранено в галерею устройства\n")
+        
+        // TODO: Здесь будет реальная отправка ИИ
+        // let response = try await aiService.analyzeScreenshot(request)
+    }
+}
+
+// MARK: - Screenshot AI Request Model
+
+/// Модель запроса для отправки скриншота ИИ
+struct ScreenshotAIRequest {
+    let image: UIImage
+    let pageNumber: Int
+    let bookTitle: String
+    let bookFormat: String
+    let textContent: String
 }
 
 // MARK: - Mock Services for Development
@@ -838,7 +992,7 @@ private struct DefaultFormulaRecognizer: FormulaRecognizerProtocol {
         return []
     }
     
-    func recognizeHandwrittenFormula(from strokes: [DrawingStroke], options: FormulaRecognitionOptions) async throws -> FormulaRecognitionResult {
+    func recognizeHandwrittenFormula(from strokes: [FormulaStroke], options: FormulaRecognitionOptions) async throws -> FormulaRecognitionResult {
         throw NSError(domain: "NotImplemented", code: 1, userInfo: [NSLocalizedDescriptionKey: "Распознавание рукописных формул будет реализовано в следующих версиях"])
     }
     

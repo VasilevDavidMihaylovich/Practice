@@ -14,15 +14,21 @@ struct FloatingActionMenu: View {
     let pdfDocument: PDFDocument?
     let currentPageNumber: Int
     let onAreaSelected: (() -> Void)?
+    let onDrawingSelected: (() -> Void)?
+    let onTextScreenshotSelected: (() -> Void)?
     
     init(
         pdfDocument: PDFDocument? = nil,
         currentPageNumber: Int = 0,
-        onAreaSelected: (() -> Void)? = nil
+        onAreaSelected: (() -> Void)? = nil,
+        onDrawingSelected: (() -> Void)? = nil,
+        onTextScreenshotSelected: (() -> Void)? = nil
     ) {
         self.pdfDocument = pdfDocument
         self.currentPageNumber = currentPageNumber
         self.onAreaSelected = onAreaSelected
+        self.onDrawingSelected = onDrawingSelected
+        self.onTextScreenshotSelected = onTextScreenshotSelected
     }
     
     var body: some View {
@@ -53,15 +59,23 @@ struct FloatingActionMenu: View {
                                 icon: "highlighter",
                                 label: "Маркер",
                                 color: .yellow,
-                                delay: 0.15
+                                delay: 0.15,
+                                action: {
+                                    isExpanded = false
+                                    onDrawingSelected?()
+                                }
                             )
                             
-                            // Кнопка "Текст" (Аа)
+                            // Кнопка "Текст" (скриншот для ИИ)
                             actionButton(
-                                icon: "textformat",
-                                label: "Текст",
+                                icon: "camera.viewfinder",
+                                label: "Скриншот",
                                 color: .blue,
-                                delay: 0.1
+                                delay: 0.1,
+                                action: {
+                                    isExpanded = false
+                                    onTextScreenshotSelected?()
+                                }
                             )
                             
                     // Кнопка "Ножницы"

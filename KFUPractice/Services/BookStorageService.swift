@@ -373,3 +373,67 @@ extension BookStorageService {
         return pages.isEmpty ? [""] : pages
     }
 }
+
+// MARK: - Drawing Management Extension
+
+extension BookStorageService {
+    private func drawingsKey(for bookId: UUID) -> String {
+        return "PageDrawings_\(bookId.uuidString)"
+    }
+    
+    /// Сохранить рисунки для книги
+    func savePageDrawings(_ drawings: [Int: PageDrawing], for bookId: UUID) {
+        let key = drawingsKey(for: bookId)
+        
+        do {
+            let data = try JSONEncoder().encode(drawings)
+            userDefaults.set(data, forKey: key)
+            userDefaults.synchronize()
+            print("💾 [BookStorage] Сохранено \(drawings.count) рисунков для книги \(bookId)")
+        } catch {
+            print("❌ [BookStorage] Ошибка сохранения рисунков: \(error)")
+        }
+    }
+    
+    /// Загрузить рисунки для книги
+    func loadPageDrawings(for bookId: UUID) -> [Int: PageDrawing] {
+        let key = drawingsKey(for: bookId)
+        
+        guard let data = userDefaults.data(forKey: key),
+              let drawings = try? JSONDecoder().decode([Int: PageDrawing].self, from: data) else {
+            print("📝 [BookStorage] Рисунки для книги \(bookId) не найдены")
+            return [:]
+        }
+        
+        print("📝 [BookStorage] Загружено \(drawings.count) рисунков для книги \(bookId)")
+        return drawings
+    }
+    
+    /// Удалить все рисунки для книги
+    func removePageDrawings(for bookId: UUID) {
+        let key = drawingsKey(for: bookId)
+        userDefaults.removeObject(forKey: key)
+        userDefaults.synchronize()
+        print("🗑️ [BookStorage] Удалены рисунки для книги \(bookId)")
+    }
+    
+    /// Удалить рисунок для конкретной страницы
+    func removeDrawing(for bookId: UUID, pageNumber: Int) {
+        var drawings = loadPageDrawings(for: bookId)
+        drawings.removeValue(forKey: pageNumber)
+        savePageDrawings(drawings, for: bookId)
+        print("🗑️ [BookStorage] Удален рисунок страницы \(pageNumber) для книги \(bookId)")
+    }
+    
+    /// Проверить, есть ли рисунки для книги
+    func hasDrawings(for bookId: UUID) -> Bool {
+        let drawings = loadPageDrawings(for: bookId)
+        return !drawings.isEmpty
+    }
+    
+    /// Получить общее количество страниц с рисунками для книги
+    func getDrawingPageCount(for bookId: UUID) -> Int {
+        let drawings = loadPageDrawings(for: bookId)
+        return drawings.count
+    }
+}

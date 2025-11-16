@@ -23,6 +23,12 @@ struct AreaSelectionView: View {
     @State private var resizeCorner: ResizeCorner = .none
     @State private var showScanButton: Bool = true
     
+    // MARK: - Screenshot Animation States
+    @State private var isCapturingScreenshot = false
+    @State private var showFlashEffect = false
+    @State private var showLoadingIndicator = false
+    @State private var hideInterface = false
+    
     private let minSize: CGSize = CGSize(width: 100, height: 80)
     private let cornerSize: CGFloat = 30
     
@@ -47,10 +53,12 @@ struct AreaSelectionView: View {
 //                    }
                 
                 // Выбранная область с рамкой
-                selectionFrame(geometry: geometry)
+                if !hideInterface {
+                    selectionFrame(geometry: geometry)
+                }
                 
                 // Кнопка сканирования
-                if showScanButton {
+                if showScanButton && !hideInterface {
                     scanButton
                         .position(
                             x: selectionRect.midX,
@@ -59,11 +67,50 @@ struct AreaSelectionView: View {
                 }
                 
                 // Кнопка закрытия
-                closeButton
-                    .position(
-                        x: selectionRect.midX,
-                        y: selectionRect.minY - 40
-                    )
+                if !hideInterface {
+                    closeButton
+                        .position(
+                            x: selectionRect.midX,
+                            y: selectionRect.minY - 40
+                        )
+                }
+                
+                // Эффект вспышки для скриншота
+                if showFlashEffect {
+                    Rectangle()
+                        .fill(Color.white)
+                        .ignoresSafeArea()
+                        .zIndex(400)
+                        .onAppear {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                showFlashEffect = false
+                            }
+                        }
+                }
+                
+                // Лоадер после скриншота
+                if showLoadingIndicator {
+                    ZStack {
+                        Color.black.opacity(0.3)
+                            .ignoresSafeArea()
+                        
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(1.2)
+                            
+                            Text("Обработка области...")
+                                .foregroundColor(.white)
+                                .font(.subheadline)
+                        }
+                        .padding(24)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.regularMaterial)
+                        )
+                    }
+                    .zIndex(500)
+                }
             }
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -320,30 +367,181 @@ struct AreaSelectionView: View {
     // MARK: - Scanning
     
     private func performScan() {
-        // Скрываем кнопку сканирования
-        withAnimation {
+        guard !isCapturingScreenshot else { return }
+        
+        isCapturingScreenshot = true
+        print("📸 [AreaSelectionView] Начинаем анимированный скриншот области...")
+        
+        // Сохраняем координаты выбранной области для передачи в ИИ
+        let selectedArea = selectionRect
+        print("📐 [AreaSelectionView] Координаты выбранной области: \(selectedArea)")
+        
+        // 1. СНАЧАЛА делаем скриншот С ВИДИМОЙ РАМКОЙ
+        let screenshotWithFrame = captureScreenshotWithFrame()
+        
+        // 2. Скрываем интерфейс выбора области для анимации
+        withAnimation(.easeOut(duration: 0.3)) {
+            hideInterface = true
             showScanButton = false
         }
         
-        // Обрезаем PDF страницу по выбранной области
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            if let croppedImage = cropPDFPage() {
-                // Конвертируем в бинарное изображение
-                if let binaryImage = convertToBinary(croppedImage) {
-                    // Распознаем текст (мок) и передаем изображение
-                    recognizeText(from: binaryImage, originalImage: croppedImage)
-                }
-            } else {
-                // Если не удалось обрезать PDF, показываем ошибку
-                print("⚠️ [AreaSelectionView] Не удалось обрезать PDF страницу")
-                withAnimation {
-                    showScanButton = true
-                    isPresented = false
-                }
+        // 3. Ждем завершения анимации скрытия и показываем эффекты
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            self.showAnimationEffects(screenshot: screenshotWithFrame, selectedArea: selectedArea)
+        }
+    }
+    
+    private func captureScreenshotWithFrame() -> UIImage? {
+        print("📸 [AreaSelectionView] Создание скриншота С ВИДИМОЙ РАМКОЙ...")
+        
+        // Получаем окно для создания скриншота
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else {
+            print("❌ [AreaSelectionView] Не удалось получить окно для скриншота")
+            return nil
+        }
+        
+        // Создаем скриншот с видимой рамкой выбора
+        let bounds = window.bounds
+        let renderer = UIGraphicsImageRenderer(bounds: bounds)
+        let screenshotWithFrame = renderer.image { context in
+            window.layer.render(in: context.cgContext)
+        }
+        
+        print("📸 [AreaSelectionView] Скриншот с рамкой создан: \(screenshotWithFrame.size)")
+        print("🔲 [AreaSelectionView] Рамка видна на скриншоте для ИИ анализа")
+        
+        return screenshotWithFrame
+    }
+    
+    private func showAnimationEffects(screenshot: UIImage?, selectedArea: CGRect) {
+        guard let screenshot = screenshot else {
+            print("❌ [AreaSelectionView] Скриншот не получен, прерываем процесс")
+            resetScanState()
+            return
+        }
+        
+        // 1. Показываем эффект вспышки
+        withAnimation(.easeOut(duration: 0.1)) {
+            showFlashEffect = true
+        }
+        
+        // 2. После вспышки показываем лоадер
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.showLoadingIndicator = true
+            }
+            
+            // 3. Обрабатываем скриншот с рамкой
+            self.processScreenshotWithFrame(screenshot, selectedArea: selectedArea)
+            
+            // 4. Через 2 секунды закрываем
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                self.finishScanWithFrame(screenshot, selectedArea: selectedArea)
             }
         }
     }
     
+    private func processScreenshotWithFrame(_ screenshot: UIImage, selectedArea: CGRect) {
+        // Мок обработки - имитация распознавания текста с видимой рамкой
+        print("🔍 [AreaSelectionView] Обработка скриншота с видимой рамкой...")
+        print("📐 [AreaSelectionView] Область интереса: \(selectedArea)")
+        print("🖼️ [AreaSelectionView] Размер скриншота: \(screenshot.size)")
+        print("🔲 [AreaSelectionView] ИИ может видеть рамку на изображении")
+        
+        // В дальнейшем здесь будет:
+        // - Отправка скриншота С РАМКОЙ в ИИ
+        // - Промпт: "Проанализируй содержимое внутри синей рамки на этом скриншоте"
+        // - ИИ сам определит что находится внутри видимой рамки
+    }
+    
+    private func finishScanWithFrame(_ screenshot: UIImage, selectedArea: CGRect) {
+        // Создаем мок результат распознавания с указанием на видимую рамку
+        let mockText = """
+        📸 Анализ содержимого внутри ВИДИМОЙ РАМКИ на скриншоте.
+        
+        🔲 На изображении видна синяя рамка выбора области.
+        📐 Координаты рамки: x=\(Int(selectedArea.origin.x)), y=\(Int(selectedArea.origin.y)), width=\(Int(selectedArea.width)), height=\(Int(selectedArea.height))
+        
+        🤖 ИИ анализирует содержимое ВНУТРИ ВИДИМОЙ РАМКИ:
+        • Может видеть точные границы выбранной области
+        • Определяет текст, изображения, элементы UI внутри рамки
+        • Игнорирует содержимое за пределами рамки
+        
+        💡 Промпт для ИИ: "Проанализируй содержимое внутри синей рамки на этом скриншоте"
+        
+        ✅ Распознавание выполнено с помощью мок-запроса.
+        """
+        
+        print("✅ [AreaSelectionView] Скриншот с рамкой обработан:")
+        print(mockText)
+        
+        // Вызываем callback со СКРИНШОТОМ С РАМКОЙ и текстом
+        onScanComplete?(screenshot, mockText)
+        
+        // Закрываем view
+        withAnimation {
+            isPresented = false
+        }
+    }
+    
+    private func resetScanState() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showLoadingIndicator = false
+            hideInterface = false
+            showScanButton = true
+        }
+        isCapturingScreenshot = false
+        print("❌ [AreaSelectionView] Сканирование прервано, интерфейс восстановлен")
+    }
+    
+    // MARK: - Legacy Cropping Functions (Deprecated)
+    // Эти функции больше не используются, так как теперь делается полный скриншот
+    /*
+    private func cropScreenArea() -> UIImage? {
+        print("📱 [AreaSelectionView] Создаем скриншот экрана для обрезки области...")
+        
+        // Получаем окно для создания скриншота
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else {
+            print("❌ [AreaSelectionView] Не удалось получить окно для скриншота")
+            return nil
+        }
+        
+        // Создаем скриншот всего экрана
+        let bounds = window.bounds
+        let renderer = UIGraphicsImageRenderer(bounds: bounds)
+        let fullScreenshot = renderer.image { context in
+            window.layer.render(in: context.cgContext)
+        }
+        
+        print("📸 [AreaSelectionView] Полный скриншот создан: \(fullScreenshot.size)")
+        print("✂️ [AreaSelectionView] Область обрезки: \(selectionRect)")
+        
+        // Обрезаем изображение по выбранной области
+        let scale = UIScreen.main.scale
+        let cropRect = CGRect(
+            x: selectionRect.origin.x * scale,
+            y: selectionRect.origin.y * scale,
+            width: selectionRect.width * scale,
+            height: selectionRect.height * scale
+        )
+        
+        guard let cgImage = fullScreenshot.cgImage,
+              let croppedCGImage = cgImage.cropping(to: cropRect) else {
+            print("❌ [AreaSelectionView] Не удалось обрезать изображение")
+            return nil
+        }
+        
+        let croppedImage = UIImage(cgImage: croppedCGImage)
+        print("✅ [AreaSelectionView] Область успешно обрезана: \(croppedImage.size)")
+        
+        return croppedImage
+    }
+    */
+    
+    /*
+    /*
     private func cropPDFPage() -> UIImage? {
         guard let pdfDoc = pdfDocument,
               currentPageNumber < pdfDoc.pageCount,
@@ -363,7 +561,7 @@ struct AreaSelectionView: View {
         }
         
         let screenSize = window.bounds.size
-        let scale = UIScreen.main.scale
+        let _ = UIScreen.main.scale
         
         // Вычисляем масштаб отображения PDF на экране
         // Предполагаем, что PDF отображается с сохранением пропорций
@@ -439,12 +637,105 @@ struct AreaSelectionView: View {
         print("✅ [AreaSelectionView] PDF страница обрезана: \(croppedImage.size)")
         return croppedImage
     }
+    */
     
+    // MARK: - Legacy Binary Conversion and Text Recognition (Deprecated)
+    // Эти функции больше не используются с новой логикой полного скриншота
+    /*
     private func convertToBinary(_ image: UIImage) -> UIImage? {
         guard let cgImage = image.cgImage else {
             print("⚠️ [AreaSelectionView] Не удалось получить CGImage")
             return nil
         }
+        
+        let width = cgImage.width
+        let height = cgImage.height
+        let colorSpace = CGColorSpaceCreateDeviceGray()
+        
+        // Создаем контекст для серого изображения
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else {
+            print("⚠️ [AreaSelectionView] Не удалось создать контекст")
+            return nil
+        }
+        
+        // Рендерим оригинальное изображение в серый контекст
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        // Получаем серое изображение
+        guard let grayImage = context.makeImage() else {
+            print("⚠️ [AreaSelectionView] Не удалось создать серое изображение")
+            return nil
+        }
+        
+        // Преобразуем в бинарное (черно-белое) изображение
+        guard let binaryContext = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else {
+            return nil
+        }
+        
+        // Применяем пороговое значение для бинаризации
+        binaryContext.interpolationQuality = .none
+        binaryContext.draw(grayImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        guard let cgImage2 = binaryContext.makeImage() else {
+            return nil
+        }
+        
+        let binaryImage = UIImage(cgImage: cgImage2)
+        print("✅ [AreaSelectionView] Изображение конвертировано в бинарное: \(binaryImage.size)")
+        return binaryImage
+    }
+    
+    private func recognizeText(from binaryImage: UIImage, originalImage: UIImage) {
+        // Мок распознавание текста
+        print("📸 [AreaSelectionView] Начато распознавание текста")
+        print("   • Размер бинарного изображения: \(binaryImage.size)")
+        print("   • Размер оригинального изображения: \(originalImage.size)")
+        
+        // Имитация обработки AI запроса
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            // Мок результат распознавания
+            let mockText = """
+            Это пример распознанного текста из выбранной области PDF.
+            
+            Текст был успешно извлечен из бинарного изображения.
+            Здесь может быть любой текст, который был на странице PDF.
+            
+            В дальнейшем этот текст будет отправлен в AI с промпт-запросом
+            для анализа и обработки.
+            
+            Распознавание выполнено с помощью мок-запроса.
+            """
+            
+            print("✅ [AreaSelectionView] Текст распознан:")
+            print(mockText)
+            
+            // Вызываем callback с изображением и текстом
+            // В дальнейшем originalImage можно отправить в AI
+            onScanComplete?(originalImage, mockText)
+            
+            // Закрываем view
+            withAnimation {
+                isPresented = false
+            }
+        }
+    }
+    */
         
         let width = cgImage.width
         let height = cgImage.height
@@ -535,6 +826,7 @@ struct AreaSelectionView: View {
             }
         }
     }
+    */
 }
 
 // MARK: - Preview

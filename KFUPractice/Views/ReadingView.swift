@@ -7,6 +7,7 @@
 
 import SwiftUI
 import PDFKit
+import Photos
 
 /// Экран для чтения книги
 struct ReadingView: View {
@@ -15,6 +16,13 @@ struct ReadingView: View {
     @State private var showNavigationBar = true
     @State private var lastTapTime = Date()
     @State private var showAreaSelection: Bool = false
+    @State private var capturedContentView: UIView?
+    
+    // MARK: - Screenshot Animation States
+    @State private var isCapturingScreenshot = false
+    @State private var showFlashEffect = false
+    @State private var showLoadingIndicator = false
+    @State private var hideFloatingMenu = false
 
     init(book: Book) {
         self._viewModel = StateObject(wrappedValue: ReadingViewModel(book: book))
@@ -22,95 +30,12 @@ struct ReadingView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            VStack(spacing: 0) {
-                // Заголовок (скрывается при чтении)
-                if showNavigationBar {
-                    headerView
-                        .transition(.move(edge: .top))
-                }
-                
-                // Основной контент
-                contentView()
-                
-                // Панель навигации (скрывается при чтении)  
-                if showNavigationBar {
-                    navigationView
-                        .transition(.move(edge: .bottom))
-                }
-            }
-            .background {
-                viewModel.readingSettings.theme.backgroundColor
-                    .ignoresSafeArea(.all, edges: .all)
-            }
-            .overlay(
-                // Действия с выделенным текстом
-                Group {
-                    if viewModel.showExplanation {
-                        Color.black.opacity(0.3)
-                            .ignoresSafeArea(.all)
-                            .onTapGesture {
-                                viewModel.clearSelection()
-                            }
-                        
-                        TextSelectionActionsView(
-                            selectedText: viewModel.selectedText,
-                            onCopy: {
-                                ClipboardManager.copy(viewModel.selectedText)
-                            },
-                            onAskAI: {
-                                viewModel.askAIAboutSelectedText()
-                            },
-                            onDismiss: {
-                                viewModel.clearSelection()
-                            }
-                        )
-                        .frame(maxWidth: min(geometry.size.width - 32, 400))
-                        .padding(.horizontal, 16)
-                        .padding(.top, geometry.safeAreaInsets.top + 60)
-                        .padding(.bottom, geometry.safeAreaInsets.bottom + 60)
-                    }
-                }
-            )
-            .overlay(
-                // Плавающее меню действий
-                FloatingActionMenu(
-                    pdfDocument: viewModel.pdfDocument,
-                    currentPageNumber: viewModel.currentPageNumber,
-                    onAreaSelected: {
-                        showAreaSelection = true
-                    }
-                )
-                .zIndex(100)
-            )
-            .overlay(
-                // Рамка выбора области для PDF
-                Group {
-                    if showAreaSelection && viewModel.book.format == .pdf {
-                        AreaSelectionView(
-                            isPresented: $showAreaSelection,
-                            pdfDocument: viewModel.pdfDocument,
-                            currentPageNumber: viewModel.currentPageNumber,
-                            onScanComplete: { image, text in
-                                print("📝 [ReadingView] Распознанный текст: \(text)")
-                                print("🖼️ [ReadingView] Изображение: \(image.size)")
-                                // TODO: Отправить изображение в AI с промпт-запросом
-                            }
-                        )
-                        .zIndex(200)
-                    }
-                }
-            )
+            mainContent
+                .overlay(overlayContent(geometry: geometry))
         }
         .navigationBarHidden(true)
         .onAppear {
-            // Принудительно обновляем UI при появлении для корректного отображения настроек
-            Task { @MainActor in
-                // Если данные уже загружены, убеждаемся что currentPageContent актуальный
-                if !viewModel.pages.isEmpty && viewModel.currentPageContent.isEmpty {
-                    viewModel.refreshCurrentPageContent() // Синхронный вызов для обновления контента
-                }
-                viewModel.objectWillChange.send()
-            }
+            setupView()
         }
         .onTapGesture {
             handleTap()
@@ -122,6 +47,300 @@ struct ReadingView: View {
             viewModel.id = .init()
         }
         .id(viewModel.id)
+    }
+    
+    // MARK: - Main Content
+    
+    private var mainContent: some View {
+        VStack(spacing: 0) {
+            // Заголовок (скрывается при чтении)
+            if showNavigationBar {
+                headerView
+                    .transition(.move(edge: .top))
+            }
+            
+            // Основной контент
+            contentView()
+            
+            // Панель навигации (скрывается при чтении)  
+            if showNavigationBar {
+                navigationView
+                    .transition(.move(edge: .bottom))
+            }
+        }
+        .background {
+            viewModel.readingSettings.theme.backgroundColor
+                .ignoresSafeArea(.all, edges: .all)
+        }
+    }
+    
+    // MARK: - Overlay Content
+    
+    @ViewBuilder
+    private func overlayContent(geometry: GeometryProxy) -> some View {
+        ZStack {
+            // Отображение сохраненных рисунков (поверх содержимого)
+            if let currentDrawing = viewModel.getDrawing(for: viewModel.currentPageNumber),
+               !currentDrawing.isEmpty {
+                DrawingOverlayView(drawing: currentDrawing)
+                    .allowsHitTesting(false)
+                    .zIndex(10)
+            }
+            
+            // Действия с выделенным текстом
+            if viewModel.showExplanation {
+                textSelectionOverlay(geometry: geometry)
+                    .zIndex(50)
+            }
+            
+            // Плавающее меню действий
+            if !hideFloatingMenu {
+                FloatingActionMenu(
+                    pdfDocument: viewModel.pdfDocument,
+                    currentPageNumber: viewModel.currentPageNumber,
+                    onAreaSelected: {
+                        showAreaSelection = true
+                    },
+                    onDrawingSelected: {
+                        viewModel.startDrawing()
+                    },
+                    onTextScreenshotSelected: {
+                        captureScreenshotWithAnimation()
+                    }
+                )
+                .zIndex(100)
+            }
+            
+            // Рамка выбора области для всех типов документов
+            if showAreaSelection {
+                AreaSelectionView(
+                    isPresented: $showAreaSelection,
+                    pdfDocument: viewModel.pdfDocument,
+                    currentPageNumber: viewModel.currentPageNumber,
+                    onScanComplete: { image, text in
+                        print("📝 [ReadingView] Распознанный текст: \(text)")
+                        print("🖼️ [ReadingView] Скриншот с рамкой: \(image.size)")
+                        // Сохраняем скриншот с видимой рамкой в галерею
+                        saveImageToGallery(image)
+                        print("💾 [ReadingView] Скриншот с рамкой сохранен в галерею")
+                        print("🔲 [ReadingView] ИИ сможет видеть выбранную область на изображении")
+                        // TODO: Отправить скриншот с рамкой в AI - ИИ увидит границы области
+                    }
+                )
+                .zIndex(200)
+            }
+            
+            // Холст для рисования (полностью прозрачный, поверх всего)
+            if viewModel.showDrawingCanvas {
+                DrawingCanvasView(
+                    isPresented: $viewModel.showDrawingCanvas,
+                    initialDrawing: viewModel.currentPageDrawing,
+                    onSave: { strokes in
+                        viewModel.saveDrawing(strokes: strokes)
+                    },
+                    onCancel: {
+                        viewModel.stopDrawing()
+                    }
+                )
+                .zIndex(300)
+            }
+            
+            // Эффект вспышки для скриншота
+            if showFlashEffect {
+                Rectangle()
+                    .fill(Color.white)
+                    .ignoresSafeArea()
+                    .zIndex(400)
+                    .onAppear {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            showFlashEffect = false
+                        }
+                    }
+            }
+            
+            // Лоадер после скриншота
+            if showLoadingIndicator {
+                ZStack {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                    
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.2)
+                        
+                        Text("Обработка скриншота...")
+                            .foregroundColor(.white)
+                            .font(.subheadline)
+                    }
+                    .padding(24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.regularMaterial)
+                    )
+                }
+                .zIndex(500)
+            }
+        }
+    }
+    
+    // MARK: - Text Selection Overlay
+    
+    @ViewBuilder
+    private func textSelectionOverlay(geometry: GeometryProxy) -> some View {
+        ZStack {
+            Color.black.opacity(0.3)
+                .ignoresSafeArea(.all)
+                .onTapGesture {
+                    viewModel.clearSelection()
+                }
+            
+            TextSelectionActionsView(
+                selectedText: viewModel.selectedText,
+                onCopy: {
+                    ClipboardManager.copy(viewModel.selectedText)
+                },
+                onAskAI: {
+                    viewModel.askAIAboutSelectedText()
+                },
+                onDismiss: {
+                    viewModel.clearSelection()
+                }
+            )
+            .frame(maxWidth: min(geometry.size.width - 32, 400))
+            .padding(.horizontal, 16)
+            .padding(.top, geometry.safeAreaInsets.top + 60)
+            .padding(.bottom, geometry.safeAreaInsets.bottom + 60)
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func setupView() {
+        // Принудительно обновляем UI при появлении для корректного отображения настроек
+        Task { @MainActor in
+            // Если данные уже загружены, убеждаемся что currentPageContent актуальный
+            if !viewModel.pages.isEmpty && viewModel.currentPageContent.isEmpty {
+                viewModel.refreshCurrentPageContent() // Синхронный вызов для обновления контента
+            }
+            viewModel.objectWillChange.send()
+        }
+    }
+    
+    // MARK: - Screenshot Functionality
+    
+    private func captureScreenshotWithAnimation() {
+        guard !isCapturingScreenshot else { return }
+        
+        isCapturingScreenshot = true
+        print("📸 [ReadingView] Начинаем анимированный скриншот...")
+        
+        // 1. Скрываем плавающее меню
+        withAnimation(.easeOut(duration: 0.3)) {
+            hideFloatingMenu = true
+        }
+        
+        // 2. Ждем завершения анимации скрытия и делаем скриншот
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            self.captureScreenshot()
+        }
+    }
+    
+    private func captureScreenshot() {
+        print("📸 [ReadingView] Создание скриншота содержимого...")
+        
+        // Получаем root view для скриншота
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else {
+            print("❌ [ReadingView] Не удалось получить окно для скриншота")
+            resetScreenshotState()
+            return
+        }
+        
+        // Создаем скриншот области с содержимым
+        let bounds = window.bounds
+        let renderer = UIGraphicsImageRenderer(bounds: bounds)
+        let screenshot = renderer.image { context in
+            window.layer.render(in: context.cgContext)
+        }
+        
+        // 3. Показываем эффект вспышки
+        withAnimation(.easeOut(duration: 0.1)) {
+            showFlashEffect = true
+        }
+        
+        // 4. После вспышки показываем лоадер
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.showLoadingIndicator = true
+            }
+            
+            // 5. Обрабатываем скриншот
+            let finalScreenshot = self.cropToContentArea(screenshot)
+            self.saveImageToGallery(finalScreenshot)
+            self.viewModel.captureScreenshot(screenshot: finalScreenshot)
+            
+            // 6. Через 2 секунды скрываем лоадер и восстанавливаем интерфейс
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                self.resetScreenshotState()
+            }
+        }
+    }
+    
+    private func resetScreenshotState() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showLoadingIndicator = false
+            hideFloatingMenu = false
+        }
+        isCapturingScreenshot = false
+        print("✅ [ReadingView] Скриншот завершен, интерфейс восстановлен")
+    }
+    
+    private func saveImageToGallery(_ image: UIImage) {
+        // Проверяем статус разрешений
+        let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+        
+        switch status {
+        case .authorized, .limited:
+            performSave(image)
+        case .denied, .restricted:
+            print("❌ [ReadingView] Нет разрешения на запись в галерею")
+        case .notDetermined:
+            // Запрашиваем разрешение
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { newStatus in
+                DispatchQueue.main.async {
+                    if newStatus == .authorized || newStatus == .limited {
+                        self.performSave(image)
+                    } else {
+                        print("❌ [ReadingView] Разрешение на запись в галерею отклонено")
+                    }
+                }
+            }
+        @unknown default:
+            print("⚠️ [ReadingView] Неизвестный статус разрешений")
+        }
+    }
+    
+    private func performSave(_ image: UIImage) {
+        PHPhotoLibrary.shared().performChanges({
+            PHAssetCreationRequest.creationRequestForAsset(from: image)
+        }) { success, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ [ReadingView] Ошибка сохранения в галерею: \(error.localizedDescription)")
+                } else if success {
+                    print("✅ [ReadingView] Изображение сохранено в галерею")
+                } else {
+                    print("⚠️ [ReadingView] Не удалось сохранить изображение")
+                }
+            }
+        }
+    }
+    
+    private func cropToContentArea(_ screenshot: UIImage) -> UIImage {
+        // В будущем здесь можно добавить логику обрезки до конкретной области содержимого
+        // Пока возвращаем полный скриншот
+        return screenshot
     }
     
     // MARK: - Header View

@@ -39,7 +39,7 @@ protocol FormulaRecognizerProtocol {
     ///   - options: Опции распознавания
     /// - Returns: Результат распознавания
     func recognizeHandwrittenFormula(
-        from strokes: [DrawingStroke],
+        from strokes: [FormulaStroke],
         options: FormulaRecognitionOptions
     ) async throws -> FormulaRecognitionResult
     
@@ -204,8 +204,8 @@ struct StructuralAnalysis {
     let suggestedType: FormulaType?   // Предполагаемый тип формулы
 }
 
-/// Штрих для рукописного ввода
-struct DrawingStroke {
+/// Штрих для рукописного ввода формул
+struct FormulaStroke {
     let points: [CGPoint]             // Точки штриха
     let pressure: [Float]             // Давление (если поддерживается)
     let timestamp: Date               // Время создания штриха
