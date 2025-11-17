@@ -72,6 +72,9 @@ struct ReadingView: View {
             viewModel.readingSettings.theme.backgroundColor
                 .ignoresSafeArea(.all, edges: .all)
         }
+        .onChange(of: showNavigationBar) { va in
+            print()
+        }
     }
     
     // MARK: - Overlay Content
@@ -96,6 +99,7 @@ struct ReadingView: View {
             // Плавающее меню действий
             if !hideFloatingMenu {
                 FloatingActionMenu(
+                    showNavigationBar: $showNavigationBar,
                     pdfDocument: viewModel.pdfDocument,
                     currentPageNumber: viewModel.currentPageNumber,
                     onAreaSelected: {
@@ -135,6 +139,7 @@ struct ReadingView: View {
                 DrawingCanvasView(
                     isPresented: $viewModel.showDrawingCanvas,
                     initialDrawing: viewModel.currentPageDrawing,
+                    showNavigationBar: $showNavigationBar,
                     onSave: { strokes in
                         viewModel.saveDrawing(strokes: strokes)
                     },
@@ -353,30 +358,11 @@ struct ReadingView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .medium))
-                    Text("Библиотека")
-                        .font(.system(size: 17))
                 }
                 .foregroundColor(.primary)
             }
             
-            Spacer(minLength: 8)
-            
-            VStack(alignment: .center, spacing: 2) {
-                Text(viewModel.book.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                
-                if let author = viewModel.book.author {
-                    Text(author)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            
-            Spacer(minLength: 8)
+            Spacer()
             
             Button {
                 viewModel.showSettingsPanel = true
@@ -387,7 +373,27 @@ struct ReadingView: View {
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
+            .opacity(viewModel.book.format == .txt ? 1 : 0)
         }
+        .overlay(content: {
+            VStack(alignment: .center, spacing: 2) {
+                Text(viewModel.book.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.3)
+                
+                if let author = viewModel.book.author {
+                    Text(author)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.3)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 30)
+        })
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(

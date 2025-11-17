@@ -24,34 +24,34 @@ struct LibraryView: View {
                 .toolbar {
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
                         // Меню диагностики (только в DEBUG режиме)
-                        #if DEBUG
-                        Menu {
-                            Button("📊 Диагностика") {
-                                viewModel.showDiagnosticInfo()
-                            }
-                            
-                            Button("🔄 Перезагрузить") {
-                                viewModel.forceReloadBooks()
-                            }
-                            
-                            Button("🗑️ Очистить все") {
-                                viewModel.clearAllBooks()
-                            }
-                        } label: {
-                            Image(systemName: "gear")
-                                .font(.title2)
-                        }
-                        #endif
+//                        #if DEBUG
+//                        Menu {
+//                            Button("📊 Диагностика") {
+//                                viewModel.showDiagnosticInfo()
+//                            }
+//                            
+//                            Button("🔄 Перезагрузить") {
+//                                viewModel.forceReloadBooks()
+//                            }
+//                            
+//                            Button("🗑️ Очистить все") {
+//                                viewModel.clearAllBooks()
+//                            }
+//                        } label: {
+//                            Image(systemName: "gear")
+//                                .font(.title2)
+//                        }
+//                        #endif
                         
                         // Кнопка создания демонстрационного PDF
-                        Button {
-                            Task {
-                                await viewModel.createSamplePDFBook()
-                            }
-                        } label: {
-                            Image(systemName: "doc.badge.plus")
-                                .font(.title2)
-                        }
+//                        Button {
+//                            Task {
+//                                await viewModel.createSamplePDFBook()
+//                            }
+//                        } label: {
+//                            Image(systemName: "doc.badge.plus")
+//                                .font(.title2)
+//                        }
                         
                         // Кнопка импорта файлов
                         Button {
@@ -137,29 +137,29 @@ struct LibraryView: View {
                         .clipShape(Capsule())
                 }
                 
-                Button {
-                    createSampleTextFile()
-                } label: {
-                    Label("Создать образец TXT", systemImage: "doc.text")
-                        .font(.subheadline)
-                        .foregroundColor(.accentColor)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(Color.accentColor.opacity(0.1))
-                        .clipShape(Capsule())
-                }
-                
-                Button {
-                    createSampleEPUBFile()
-                } label: {
-                    Label("Создать образец EPUB", systemImage: "book.closed")
-                        .font(.subheadline)
-                        .foregroundColor(.purple)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(Color.purple.opacity(0.1))
-                        .clipShape(Capsule())
-                }
+//                Button {
+//                    createSampleTextFile()
+//                } label: {
+//                    Label("Создать образец TXT", systemImage: "doc.text")
+//                        .font(.subheadline)
+//                        .foregroundColor(.accentColor)
+//                        .padding(.horizontal, 20)
+//                        .padding(.vertical, 10)
+//                        .background(Color.accentColor.opacity(0.1))
+//                        .clipShape(Capsule())
+//                }
+//                
+//                Button {
+//                    createSampleEPUBFile()
+//                } label: {
+//                    Label("Создать образец EPUB", systemImage: "book.closed")
+//                        .font(.subheadline)
+//                        .foregroundColor(.purple)
+//                        .padding(.horizontal, 20)
+//                        .padding(.vertical, 10)
+//                        .background(Color.purple.opacity(0.1))
+//                        .clipShape(Capsule())
+//                }
             }
             
             Spacer()
@@ -553,28 +553,31 @@ struct BookCardView: View {
                     .fontWeight(.medium)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                    .padding(8)
                 
                 Text(book.displayAuthor)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
+                    .padding(.horizontal, 8)
                 
-                HStack {
-                    Text(book.format.displayName)
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.gray.opacity(0.2))
-                        .clipShape(Capsule())
-                    
-                    Spacer()
-                    
-                    if book.readingProgress > 0 {
-                        Text("\(book.progressPercentage)%")
-                            .font(.caption)
-                            .foregroundColor(.accentColor)
-                    }
-                }
+//                HStack {
+//                    Text(book.format.displayName)
+//                        .font(.caption)
+//                        .padding(.horizontal, 6)
+//                        .padding(.vertical, 2)
+//                        .background(Color.gray.opacity(0.2))
+//                        .clipShape(Capsule())
+//                        .padding(8)
+//                    Spacer()
+//                    
+//                    if book.readingProgress > 0 {
+//                        Text("\(book.progressPercentage)%")
+//                            .font(.caption)
+//                            .foregroundColor(.accentColor)
+//                            .padding(.horizontal, 8)
+//                    }
+//                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

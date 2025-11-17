@@ -14,6 +14,7 @@ struct DrawingCanvasView: View {
     @State private var strokes: [DrawingStroke] = []
     @State private var brushSettings = DrawingBrushSettings()
     @State private var showBrushSettings: Bool = false
+    @Binding var showNavigationBar: Bool
     
     let initialDrawing: PageDrawing?
     let onSave: (([DrawingStroke]) -> Void)
@@ -22,11 +23,13 @@ struct DrawingCanvasView: View {
     init(
         isPresented: Binding<Bool>,
         initialDrawing: PageDrawing? = nil,
+        showNavigationBar: Binding<Bool>,
         onSave: @escaping ([DrawingStroke]) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self._isPresented = isPresented
         self.initialDrawing = initialDrawing
+        self._showNavigationBar = showNavigationBar
         self.onSave = onSave
         self.onCancel = onCancel
     }
@@ -80,6 +83,9 @@ struct DrawingCanvasView: View {
                 HStack {
                     // Кнопка закрытия
                     Button {
+                        withAnimation {
+                            showNavigationBar = true
+                        }
                         onCancel()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -168,6 +174,10 @@ struct DrawingCanvasView: View {
             
             // Сохранить
             Button {
+                withAnimation {
+                    showNavigationBar = true
+                }
+
                 onSave(strokes)
             } label: {
                 Image(systemName: "checkmark")
@@ -315,6 +325,7 @@ struct DrawingCanvasView: View {
 #Preview {
     DrawingCanvasView(
         isPresented: Binding.constant(true),
+        showNavigationBar: .constant(false),
         onSave: { strokes in
             print("Saved \(strokes.count) strokes")
         },

@@ -11,6 +11,7 @@ import PDFKit
 /// Плавающее меню действий с магической палочкой
 struct FloatingActionMenu: View {
     @State private var isExpanded: Bool = false
+    @Binding var showNavigationBar: Bool
     let pdfDocument: PDFDocument?
     let currentPageNumber: Int
     let onAreaSelected: (() -> Void)?
@@ -18,12 +19,14 @@ struct FloatingActionMenu: View {
     let onTextScreenshotSelected: (() -> Void)?
     
     init(
+        showNavigationBar: Binding<Bool>,
         pdfDocument: PDFDocument? = nil,
         currentPageNumber: Int = 0,
         onAreaSelected: (() -> Void)? = nil,
         onDrawingSelected: (() -> Void)? = nil,
         onTextScreenshotSelected: (() -> Void)? = nil
     ) {
+        self._showNavigationBar = showNavigationBar
         self.pdfDocument = pdfDocument
         self.currentPageNumber = currentPageNumber
         self.onAreaSelected = onAreaSelected
@@ -62,6 +65,7 @@ struct FloatingActionMenu: View {
                                 delay: 0.15,
                                 action: {
                                     isExpanded = false
+                                    showNavigationBar = false
                                     onDrawingSelected?()
                                 }
                             )
@@ -95,7 +99,7 @@ struct FloatingActionMenu: View {
                         mainButton
                     }
                     .padding(.trailing, 20)
-                    .padding(.bottom, 30)
+                    .padding(.bottom, 130)
                 }
             }
         }
@@ -249,7 +253,7 @@ struct ActionButtonStyle: ButtonStyle {
         Color.gray.opacity(0.1)
             .ignoresSafeArea()
         
-        FloatingActionMenu()
+        FloatingActionMenu(showNavigationBar: .constant(false))
     }
 }
 
