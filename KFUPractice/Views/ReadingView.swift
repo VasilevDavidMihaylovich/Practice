@@ -85,14 +85,6 @@ struct ReadingView: View {
     @ViewBuilder
     private func overlayContent(geometry: GeometryProxy) -> some View {
         ZStack {
-            // Отображение сохраненных рисунков (поверх содержимого)
-            if let currentDrawing = viewModel.getDrawing(for: viewModel.currentPageNumber),
-               !currentDrawing.isEmpty {
-                DrawingOverlayView(drawing: currentDrawing)
-                    .allowsHitTesting(false)
-                    .zIndex(10)
-            }
-            
             // Действия с выделенным текстом
             if viewModel.showExplanation {
                 textSelectionOverlay(geometry: geometry)
@@ -135,6 +127,15 @@ struct ReadingView: View {
                     }
                 )
                 .zIndex(200)
+            }
+            
+            // Отображение сохраненных рисунков (с теми же координатами что и DrawingCanvasView)
+            if let currentDrawing = viewModel.getDrawing(for: viewModel.currentPageNumber),
+               !currentDrawing.isEmpty {
+                DrawingOverlayView(drawing: currentDrawing)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .zIndex(250)
             }
             
             // Холст для рисования (полностью прозрачный, поверх всего)
