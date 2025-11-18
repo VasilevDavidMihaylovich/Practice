@@ -16,6 +16,8 @@ struct ReadingView: View {
     @State private var showNavigationBar = true
     @State private var lastTapTime = Date()
     @State private var showAreaSelection: Bool = false
+    @State private var showAINotesSelection: Bool = false
+    @State private var showChartSelection: Bool = false
     @State private var capturedContentView: UIView?
     
     // MARK: - Screenshot Animation States
@@ -23,6 +25,11 @@ struct ReadingView: View {
     @State private var showFlashEffect = false
     @State private var showLoadingIndicator = false
     @State private var hideFloatingMenu = false
+    @State private var showActionMenu = false // Новое состояние для управления меню
+    
+    // MARK: - AI Result States
+    @State private var showAIResult = false
+    @State private var currentAIResult: AIResult?
 
     init(book: Book) {
         self._viewModel = StateObject(wrappedValue: ReadingViewModel(book: book))
@@ -43,6 +50,15 @@ struct ReadingView: View {
         .sheet(isPresented: $viewModel.showSettingsPanel) {
             ReadingSettingsView(settings: $viewModel.readingSettings)
         }
+        .sheet(isPresented: $showAIResult) {
+            AIResultSheet(
+                result: currentAIResult ?? createFallbackAIResult(),
+                isPresented: $showAIResult,
+                onSaveToNotes: { aiResult in
+                    saveAIResultToNotes(aiResult)
+                }
+            )
+        }
         .refreshable {
             viewModel.id = .init()
         }
@@ -58,8 +74,9 @@ struct ReadingView: View {
 //
 //            }
             headerView
-//                .transition(.move(edge: .top))
                 .opacity(showNavigationBar ? 1 : 0)
+//                .transition(.move(edge: .top))
+
             // Основной контент
             contentView()
             
@@ -75,9 +92,6 @@ struct ReadingView: View {
             viewModel.readingSettings.theme.backgroundColor
                 .ignoresSafeArea(.all, edges: .all)
         }
-        .onChange(of: showNavigationBar) { va in
-            print()
-        }
     }
     
     // MARK: - Overlay Content
@@ -91,9 +105,10 @@ struct ReadingView: View {
                     .zIndex(50)
             }
             
-            // Плавающее меню действий
+            // Меню действий в header
             if !hideFloatingMenu {
-                FloatingActionMenu(
+                HeaderActionMenu(
+                    isExpanded: $showActionMenu,
                     showNavigationBar: $showNavigationBar,
                     pdfDocument: viewModel.pdfDocument,
                     currentPageNumber: viewModel.currentPageNumber,
@@ -101,10 +116,17 @@ struct ReadingView: View {
                         showAreaSelection = true
                     },
                     onDrawingSelected: {
+                        // Маркер - без показа результата ИИ
                         viewModel.startDrawing()
                     },
                     onTextScreenshotSelected: {
                         captureScreenshotWithAnimation()
+                    },
+                    onAINotesSelected: {
+                        showAINotesSelection = true
+                    },
+                    onChartSelected: {
+                        showChartSelection = true
                     }
                 )
                 .zIndex(100)
@@ -114,6 +136,7 @@ struct ReadingView: View {
             if showAreaSelection {
                 AreaSelectionView(
                     isPresented: $showAreaSelection,
+                    showNavigationBar: $showNavigationBar,
                     pdfDocument: viewModel.pdfDocument,
                     currentPageNumber: viewModel.currentPageNumber,
                     onScanComplete: { image, text in
@@ -123,7 +146,55 @@ struct ReadingView: View {
                         saveImageToGallery(image)
                         print("💾 [ReadingView] Скриншот с рамкой сохранен в галерею")
                         print("🔲 [ReadingView] ИИ сможет видеть выбранную область на изображении")
-                        // TODO: Отправить скриншот с рамкой в AI - ИИ увидит границы области
+                        
+                        // Показываем результат ИИ
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            showAIResultForAction(.areaSelection)
+                        }
+                    }
+                )
+                .zIndex(200)
+            }
+            
+            // Рамка выбора области для AI заметок
+            if showAINotesSelection {
+                AreaSelectionView(
+                    isPresented: $showAINotesSelection,
+                    showNavigationBar: $showNavigationBar,
+                    pdfDocument: viewModel.pdfDocument,
+                    currentPageNumber: viewModel.currentPageNumber,
+                    onScanComplete: { image, text in
+                        print("🧠 [ReadingView] AI заметка - текст: \(text)")
+                        print("🖼️ [ReadingView] AI заметка - изображение: \(image.size)")
+                        // Создаем AI заметку с изображением
+                        self.createAINote(image: image, text: text)
+                        
+                        // Показываем результат ИИ
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            self.showAIResultForAction(.aiNote)
+                        }
+                    }
+                )
+                .zIndex(200)
+            }
+            
+            // Рамка выбора области для графиков
+            if showChartSelection {
+                AreaSelectionView(
+                    isPresented: $showChartSelection,
+                    showNavigationBar: $showNavigationBar,
+                    pdfDocument: viewModel.pdfDocument,
+                    currentPageNumber: viewModel.currentPageNumber,
+                    onScanComplete: { image, text in
+                        print("📊 [ReadingView] График - текст: \(text)")
+                        print("🖼️ [ReadingView] График - изображение: \(image.size)")
+                        // Создаем заметку с графиком
+                        self.createChart(image: image, text: text)
+                        
+                        // Показываем результат ИИ
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            self.showAIResultForAction(.chart)
+                        }
                     }
                 )
                 .zIndex(200)
@@ -292,6 +363,11 @@ struct ReadingView: View {
             // 6. Через 2 секунды скрываем лоадер и восстанавливаем интерфейс
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 self.resetScreenshotState()
+                
+                // Показываем результат ИИ
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.showAIResultForAction(.screenshot)
+                }
             }
         }
     }
@@ -365,19 +441,33 @@ struct ReadingView: View {
                 }
                 .foregroundColor(.primary)
             }
-            
+
             Spacer()
             
+            // Кнопка меню действий
             Button {
-                viewModel.showSettingsPanel = true
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    showActionMenu.toggle()
+                }
             } label: {
-                Image(systemName: "textformat.size")
+                Image(systemName: "wand.and.stars")
                     .font(.system(size: 20))
                     .foregroundColor(.primary)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
-            .opacity(viewModel.book.format == .txt ? 1 : 0)
+
+            if viewModel.book.format == .txt {
+                Button {
+                    viewModel.showSettingsPanel = true
+                } label: {
+                    Image(systemName: "textformat.size")
+                        .font(.system(size: 20))
+                        .foregroundColor(.primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -414,7 +504,7 @@ struct ReadingView: View {
                         }
                         .frame(minHeight: geometry.size.height)
                     }
-                    .padding(.horizontal, max(16, viewModel.readingSettings.horizontalPadding))
+                    .padding(.horizontal, max(20, viewModel.readingSettings.horizontalPadding))
                     .clipped()
                 }
             }
@@ -423,14 +513,16 @@ struct ReadingView: View {
     
     @ViewBuilder
     private func pdfContentView(pdfDocument: PDFDocument) -> some View {
-        PDFBookView(
-            pdfDocument: pdfDocument,
-            currentPageNumber: $viewModel.currentPageNumber,
-            onPageChanged: { pageNumber in
-                // Обновляем контент при смене страницы
-                viewModel.currentPageNumber = pageNumber
-            }
-        )
+        GeometryReader { geometry in
+            PDFBookView(
+                pdfDocument: pdfDocument,
+                currentPageNumber: $viewModel.currentPageNumber,
+                onPageChanged: { pageNumber in
+                    // Обновляем контент при смене страницы
+                    viewModel.currentPageNumber = pageNumber
+                }
+            )
+        }
     }
     
     @ViewBuilder
@@ -449,7 +541,7 @@ struct ReadingView: View {
             }
         )
         .padding(.top, 20)
-        .padding(.bottom, 40) // Extra bottom padding for comfortable reading
+        .padding(.bottom, 60) // Увеличили padding снизу с 40 до 60
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     
@@ -557,6 +649,13 @@ struct ReadingView: View {
         }
         .padding(.top, 12)
         .padding(.bottom, 16)
+        .overlay(content: {
+            if !showNavigationBar {
+                Color.white
+                    .ignoresSafeArea()
+                Color.black.opacity(0.1)
+            }
+        })
 //        .background(
 //            Color(.systemBackground)
 //                .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: -1)
@@ -603,6 +702,229 @@ struct ReadingView: View {
                 showNavigationBar.toggle()
             }
         }
+    }
+    
+    // MARK: - AI Notes and Chart Creation
+    
+    private func createAINote(image: UIImage, text: String) {
+        guard let imageData = image.pngData() else {
+            print("❌ [ReadingView] Не удалось преобразовать изображение в Data")
+            return
+        }
+        
+        let note = Note(
+            bookId: viewModel.book.id,
+            type: .aiNote,
+            selectedText: text,
+            userText: "AI заметка создана \(Date())",
+            imageData: imageData,
+            position: ReadingPosition(
+                pageNumber: viewModel.currentPageNumber,
+                progressPercentage: viewModel.readingProgress
+            ),
+            pageNumber: viewModel.currentPageNumber
+        )
+        
+        // Сохраняем заметку
+        viewModel.addNote(note)
+        
+        print("🧠 [ReadingView] AI заметка создана и сохранена")
+    }
+    
+    private func createChart(image: UIImage, text: String) {
+        guard let imageData = image.pngData() else {
+            print("❌ [ReadingView] Не удалось преобразовать изображение в Data")
+            return
+        }
+        
+        let note = Note(
+            bookId: viewModel.book.id,
+            type: .chart,
+            selectedText: text,
+            userText: "График создан \(Date())",
+            imageData: imageData,
+            position: ReadingPosition(
+                pageNumber: viewModel.currentPageNumber,
+                progressPercentage: viewModel.readingProgress
+            ),
+            pageNumber: viewModel.currentPageNumber
+        )
+        
+        // Сохраняем заметку
+        viewModel.addNote(note)
+        
+        print("💾 [ReadingView] Результат ИИ сохранен в заметки")
+    }
+    
+    /// Создать базовый AIResult для отображения, если основные данные отсутствуют
+    private func createFallbackAIResult() -> AIResult {
+        return AIResult(
+            title: "Демонстрация AI функций",
+            content: "", // Пустой content будет заменен на mock данные в AIResultSheet
+            actionType: .aiNote
+        )
+    }
+    
+    // MARK: - AI Result Methods
+    
+    /// Показать результат ИИ для конкретного действия
+    private func showAIResultForAction(_ actionType: AIActionType) {
+        currentAIResult = generateMockAIResult(for: actionType)
+        showAIResult = true
+    }
+    
+    /// Генерируем мок результат ИИ
+    private func generateMockAIResult(for actionType: AIActionType) -> AIResult {
+        let content: String
+        let title: String
+        
+        switch actionType {
+        case .screenshot:
+            title = "Анализ скриншота страницы \(viewModel.currentPageNumber + 1)"
+            content = """
+# Анализ содержимого страницы
+
+## Основные концепции
+На данной странице рассматриваются фундаментальные принципы изучаемого материала.
+
+### Ключевые моменты:
+- Основные определения и термины
+- Практические примеры применения
+- Связь с предыдущими темами
+
+### Рекомендации для изучения:
+1. Внимательно изучите определения
+2. Проработайте примеры
+3. Найдите связи с уже изученным материалом
+
+> **Совет:** Обратите особое внимание на выделенные фрагменты текста
+
+## Вопросы для самопроверки:
+- Какие основные концепции представлены?
+- Как они связаны с общей темой?
+- Какие практические применения возможны?
+
+**Время изучения:** ~10-15 минут
+"""
+            
+        case .aiNote:
+            title = "AI заметка по выбранному фрагменту"
+            content = """
+# Детальный анализ выбранного текста
+
+## Краткое содержание
+Выбранный фрагмент содержит важную информацию, требующую детального изучения.
+
+### Основные идеи:
+- Центральная концепция материала
+- Вспомогательные определения
+- Практические аспекты
+
+### Рекомендации:
+1. **Запомните:** Ключевые термины из текста
+2. **Поймите:** Логическую связь между понятиями  
+3. **Примените:** Знания на практике
+
+```
+Формула или важное правило (если применимо)
+```
+
+> Этот фрагмент является основой для понимания последующих тем
+
+## Связь с другими темами
+- Предыдущие главы: основы
+- Текущая тема: углубленное изучение
+- Следующие разделы: практическое применение
+"""
+            
+        case .chart:
+            title = "Анализ графика/диаграммы"
+            content = """
+# Интерпретация графического материала
+
+## Тип визуализации
+Представленный график демонстрирует важные закономерности изучаемого материала.
+
+### Что показывает график:
+- **Оси координат:** Основные переменные
+- **Тренды:** Направление изменений
+- **Ключевые точки:** Критические значения
+
+### Как читать график:
+1. Определите масштаб осей
+2. Найдите основной тренд
+3. Выделите аномальные точки
+4. Сделайте выводы
+
+> **Важно:** Обращайте внимание на единицы измерения
+
+## Практическое значение:
+- Подтверждает теоретические выводы
+- Показывает реальные данные
+- Помогает в прогнозировании
+
+### Вопросы для анализа:
+- Какую закономерность показывает график?
+- Что означают критические точки?
+- Как это применить на практике?
+"""
+            
+        case .areaSelection:
+            title = "Анализ выбранной области"
+            content = """
+# Детальное изучение выделенного фрагмента
+
+## Содержание области
+Выбранный фрагмент содержит концентрированную информацию для изучения.
+
+### Структура материала:
+- **Заголовки:** Основная тематика
+- **Текст:** Подробные объяснения
+- **Визуальные элементы:** Схемы, формулы, примеры
+
+### Рекомендуемый подход:
+1. Прочитайте весь фрагмент целиком
+2. Выделите незнакомые термины
+3. Найдите ключевые утверждения
+4. Сформулируйте основные выводы
+
+```
+Пример кода или формулы из выбранной области
+```
+
+> Этот фрагмент требует особого внимания и может содержать важную для экзамена информацию
+
+## Связанные темы:
+- Предыдущий материал для контекста
+- Текущая тема для углубления
+- Будущие разделы для развития
+
+### Задания для закрепления:
+- Составьте конспект фрагмента
+- Найдите примеры из практики
+- Подготовьте вопросы по теме
+"""
+        }
+        
+        return AIResult(title: title, content: content, actionType: actionType)
+    }
+    
+    /// Сохранить результат ИИ в заметки
+    private func saveAIResultToNotes(_ result: AIResult) {
+        let note = Note(
+            bookId: viewModel.book.id,
+            type: .custom,
+            selectedText: "AI результат: \(result.actionType.displayName)",
+            userText: result.content,
+            position: ReadingPosition(
+                pageNumber: viewModel.currentPageNumber,
+                progressPercentage: viewModel.readingProgress
+            ),
+            pageNumber: viewModel.currentPageNumber
+        )
+        
+        viewModel.addNote(note)
+        print("💾 [ReadingView] Результат ИИ сохранен в заметки")
     }
 }
 

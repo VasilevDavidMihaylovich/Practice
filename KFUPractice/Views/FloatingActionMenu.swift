@@ -10,28 +10,36 @@ import PDFKit
 
 /// Плавающее меню действий с магической палочкой
 struct FloatingActionMenu: View {
-    @State private var isExpanded: Bool = false
+    @Binding var isExpanded: Bool // Теперь управляется извне
     @Binding var showNavigationBar: Bool
     let pdfDocument: PDFDocument?
     let currentPageNumber: Int
     let onAreaSelected: (() -> Void)?
     let onDrawingSelected: (() -> Void)?
     let onTextScreenshotSelected: (() -> Void)?
+    let onAINotesSelected: (() -> Void)?
+    let onChartSelected: (() -> Void)?
     
     init(
+        isExpanded: Binding<Bool>,
         showNavigationBar: Binding<Bool>,
         pdfDocument: PDFDocument? = nil,
         currentPageNumber: Int = 0,
         onAreaSelected: (() -> Void)? = nil,
         onDrawingSelected: (() -> Void)? = nil,
-        onTextScreenshotSelected: (() -> Void)? = nil
+        onTextScreenshotSelected: (() -> Void)? = nil,
+        onAINotesSelected: (() -> Void)? = nil,
+        onChartSelected: (() -> Void)? = nil
     ) {
+        self._isExpanded = isExpanded
         self._showNavigationBar = showNavigationBar
         self.pdfDocument = pdfDocument
         self.currentPageNumber = currentPageNumber
         self.onAreaSelected = onAreaSelected
         self.onDrawingSelected = onDrawingSelected
         self.onTextScreenshotSelected = onTextScreenshotSelected
+        self.onAINotesSelected = onAINotesSelected
+        self.onChartSelected = onChartSelected
     }
     
     var body: some View {
@@ -55,14 +63,14 @@ struct FloatingActionMenu: View {
                 HStack(spacing: 0) {
                     Spacer()
                     
-                    VStack(spacing: 16) {
+                    VStack(spacing: 12) { // Уменьшили spacing с 16 до 12
                         if isExpanded {
                             // Кнопка "Маркер"
                             actionButton(
                                 icon: "highlighter",
-                                label: "Маркер",
+                                label: "Пометки",
                                 color: .yellow,
-                                delay: 0.15,
+                                delay: 0.25,
                                 action: {
                                     isExpanded = false
                                     showNavigationBar = false
@@ -70,81 +78,64 @@ struct FloatingActionMenu: View {
                                 }
                             )
                             
+                            // Кнопка "График"
+                            actionButton(
+                                icon: "chart.bar",
+                                label: "График",
+                                color: .green,
+                                delay: 0.20,
+                                action: {
+                                    isExpanded = false
+                                    showNavigationBar = false
+                                    onChartSelected?()
+                                }
+                            )
+                            
+                            // Кнопка "AI заметка"
+                            actionButton(
+                                icon: "brain",
+                                label: "AI заметка",
+                                color: .purple,
+                                delay: 0.15,
+                                action: {
+                                    isExpanded = false
+                                    showNavigationBar = false
+                                    onAINotesSelected?()
+                                }
+                            )
+                            
                             // Кнопка "Текст" (скриншот для ИИ)
                             actionButton(
                                 icon: "camera.viewfinder",
-                                label: "Скриншот",
+                                label: "Конспект",
                                 color: .blue,
-                                delay: 0.1,
+                                delay: 0.10,
                                 action: {
                                     isExpanded = false
+                                    showNavigationBar = false
                                     onTextScreenshotSelected?()
                                 }
                             )
                             
                     // Кнопка "Ножницы"
-                    actionButton(
-                        icon: "scissors",
-                        label: "Вырезать",
-                        color: .red,
-                        delay: 0.05,
-                        action: {
-                            isExpanded = false
-                            onAreaSelected?()
+//                    actionButton(
+//                        icon: "scissors",
+//                        label: "Вырезать",
+//                        color: .red,
+//                        delay: 0.05,
+//                        action: {
+//                            isExpanded = false
+//                            onAreaSelected?()
+//                        }
+//                    )
                         }
-                    )
-                        }
-                        
-                        // Главная кнопка с магической палочкой
-                        mainButton
                     }
-                    .padding(.trailing, 20)
+                    .padding(.trailing, 10) // Уменьшили отступ справа с 20 до 10
                     .padding(.bottom, 130)
 //                    .opacity(showNavigationBar ? 1 : 0)
                 }
             }
         }
-    }
-    
-    // MARK: - Main Button
-    
-    private var mainButton: some View {
-        Button {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                isExpanded.toggle()
-            }
-        } label: {
-            ZStack {
-                // Фон с градиентом
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.purple.opacity(0.9),
-                                Color.pink.opacity(0.9)
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 60, height: 60)
-//                    .shadow(
-//                        color: Color.purple.opacity(0.4),
-//                        radius: isExpanded ? 20 : 10,
-//                        x: 0,
-//                        y: isExpanded ? 5 : 2
-//                    )
-                
-                // Иконка магической палочки с эффектом свечения
-                Image(systemName: isExpanded ? "xmark" : "wand.and.stars")
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundColor(.white)
-                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                    .scaleEffect(isExpanded ? 0.85 : 1.0)
-//                    .shadow(color: Color.white.opacity(0.5), radius: 4)
-            }
-        }
-        .buttonStyle(ScaleButtonStyle())
     }
     
     // MARK: - Action Buttons
@@ -159,6 +150,10 @@ struct FloatingActionMenu: View {
     ) -> some View {
         Button {
             if let action = action {
+                // Закрываем меню
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    isExpanded = false
+                }
                 action()
             } else {
                 // TODO: Добавить функционал
@@ -184,7 +179,7 @@ struct FloatingActionMenu: View {
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 44, height: 44)
+                        .frame(width: 40, height: 40) // Уменьшили с 44x44 до 40x40
                         .overlay(
                             Circle()
                                 .stroke(color.opacity(0.3), lineWidth: 1)
@@ -203,7 +198,7 @@ struct FloatingActionMenu: View {
                 Spacer()
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.vertical, 10) // Уменьшили с 12 до 10
             .background(
                 RoundedRectangle(cornerRadius: 14)
                     .fill(Color(.white))
@@ -214,7 +209,7 @@ struct FloatingActionMenu: View {
 //                        y: 5
 //                    )
             )
-            .frame(width: 190)
+            .frame(width: 240) // Увеличили ширину с 200 до 240
         }
         .buttonStyle(ActionButtonStyle())
         .opacity(isExpanded ? 1 : 0)
@@ -254,7 +249,10 @@ struct ActionButtonStyle: ButtonStyle {
         Color.gray.opacity(0.1)
             .ignoresSafeArea()
         
-        FloatingActionMenu(showNavigationBar: .constant(false))
+        FloatingActionMenu(
+            isExpanded: .constant(false),
+            showNavigationBar: .constant(false)
+        )
     }
 }
 

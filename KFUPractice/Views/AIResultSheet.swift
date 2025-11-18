@@ -1,0 +1,532 @@
+//
+//  AIResultSheet.swift
+//  KFUPractice
+//
+//  Sheet для отображения результата ИИ
+//
+
+import SwiftUI
+
+/// Sheet для отображения результата ИИ в формате Markdown
+struct AIResultSheet: View {
+    let result: AIResult
+    @Binding var isPresented: Bool
+    let onSaveToNotes: (AIResult) -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var showSaveAlert = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Заголовок с иконкой
+                headerView
+                
+                // Основной контент с Markdown
+                ScrollView {
+                    markdownContent
+                        .padding()
+                }
+                .background(Color(.systemGroupedBackground))
+                
+                // Кнопки действий
+                actionsView
+            }
+            .background(Color(.systemBackground))
+            .navigationBarHidden(true)
+        }
+    }
+    
+    // MARK: - Header
+    
+    private var headerView: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Button("Закрыть") {
+                    isPresented = false
+                }
+                .foregroundColor(.primary)
+                
+                Spacer()
+                
+                HStack(spacing: 8) {
+                    Image(systemName: result.actionType.icon)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(colorForActionType(result.actionType))
+                    
+                    Text(result.actionType.displayName)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                }
+                
+                Spacer()
+                
+                Button {
+                    onSaveToNotes(result)
+                    showSaveAlert = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.primary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            
+            Text(result.title)
+                .font(.title2)
+                .fontWeight(.semibold)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+                .foregroundColor(.primary)
+            
+            Text("Создано: \(formatDate(result.createdAt))")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.bottom, 16)
+            
+            Divider()
+        }
+        .background(Color(.systemBackground))
+    }
+    
+    // MARK: - Markdown Content
+    
+    private var markdownContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            let content = result.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let markdownToDisplay = content.isEmpty ? getMockContentForActionType(result.actionType) : content
+            
+            ForEach(parseMarkdown(markdownToDisplay), id: \.id) { element in
+                markdownElement(element)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    
+    @ViewBuilder
+    private func markdownElement(_ element: MarkdownElement) -> some View {
+        switch element.type {
+        case .heading1:
+            Text(element.content)
+                .font(.title)
+                .fontWeight(.bold)
+                .padding(.top, 20)
+                .padding(.bottom, 8)
+                .foregroundColor(.primary)
+            
+        case .heading2:
+            Text(element.content)
+                .font(.title2)
+                .fontWeight(.semibold)
+                .padding(.top, 16)
+                .padding(.bottom, 6)
+                .foregroundColor(.primary)
+            
+        case .heading3:
+            Text(element.content)
+                .font(.title3)
+                .fontWeight(.medium)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+                .foregroundColor(.primary)
+            
+        case .paragraph:
+            Text(element.content)
+                .font(.body)
+                .lineSpacing(4)
+                .padding(.bottom, 8)
+                .foregroundColor(.primary)
+            
+        case .bulletPoint:
+            HStack(alignment: .top, spacing: 8) {
+                Text("•")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 2)
+                
+                Text(element.content)
+                    .font(.body)
+                    .lineSpacing(4)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+            }
+            .padding(.leading, 16)
+            .padding(.bottom, 4)
+            
+        case .numberedList:
+            HStack(alignment: .top, spacing: 8) {
+                Text("\(element.number ?? 1).")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 2)
+                
+                Text(element.content)
+                    .font(.body)
+                    .lineSpacing(4)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+            }
+            .padding(.leading, 16)
+            .padding(.bottom, 4)
+            
+        case .code:
+            Text(element.content)
+                .font(.system(.body, design: .monospaced))
+                .padding(12)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                .foregroundColor(.primary)
+            
+        case .blockquote:
+            HStack(alignment: .top, spacing: 12) {
+                Rectangle()
+                    .fill(Color(.systemBlue))
+                    .frame(width: 4)
+                
+                Text(element.content)
+                    .font(.body)
+                    .italic()
+                    .lineSpacing(4)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+            }
+            .padding(.leading, 16)
+            .padding(.bottom, 8)
+        }
+    }
+    
+    // MARK: - Actions
+    
+    private var actionsView: some View {
+        VStack(spacing: 0) {
+            Divider()
+            
+            HStack(spacing: 16) {
+                Button {
+                    isPresented = false
+                } label: {
+                    Text("Закрыть")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+                }
+                
+                Button {
+                    onSaveToNotes(result)
+                    showSaveAlert = true
+                } label: {
+                    Text("Сохранить в заметки")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(Color.blue)
+                        .cornerRadius(10)
+                }
+            }
+            .padding(16)
+        }
+        .background(Color(.systemBackground))
+        .alert("Сохранено!", isPresented: $showSaveAlert) {
+            Button("OK") { }
+        } message: {
+            Text("Результат ИИ сохранен в заметки")
+        }
+    }
+    
+    // MARK: - Mock Data Generation
+    
+    private func getMockContentForActionType(_ actionType: AIActionType) -> String {
+        switch actionType {
+        case .screenshot:
+            return """
+# 📸 Анализ скриншота страницы
+
+## Основные концепции на странице
+Страница содержит важные образовательные материалы, требующие детального изучения.
+
+### Ключевые элементы:
+- **Определения** основных терминов
+- **Примеры** практического применения  
+- **Формулы** и математические выражения
+- **Диаграммы** для визуального понимания
+
+### Рекомендации для изучения:
+1. Внимательно прочтите все определения
+2. Разберите каждый пример
+3. Запомните ключевые формулы
+4. Проследите логическую связь между темами
+
+```
+Важная формула или выражение
+E = mc²
+```
+
+> **Совет:** Делайте заметки по ходу изучения для лучшего запоминания
+
+## Вопросы для самопроверки:
+1. Какие основные концепции представлены?
+2. Как они связаны с предыдущими темами?
+3. Где можно применить полученные знания?
+
+**Время изучения:** ⏱️ 10-15 минут
+**Сложность:** 📊 Средняя
+"""
+            
+        case .aiNote:
+            return """
+# 🧠 Умная заметка AI
+
+## Анализ выбранного фрагмента
+Выделенный текст содержит критически важную информацию для понимания темы.
+
+### Главные идеи:
+- **Центральная концепция** — основа понимания
+- **Вспомогательные термины** — дополнительный контекст
+- **Практическое значение** — где применить
+
+### Структурированный анализ:
+1. **Контекст:** В рамках какой большой темы
+2. **Суть:** Что именно объясняется
+3. **Важность:** Почему это критично знать
+4. **Применение:** Как использовать на практике
+
+```
+Ключевая формула или принцип:
+Принцип неопределенности: Δx·Δp ≥ ħ/2
+```
+
+> **Запомните:** Этот фрагмент — основа для понимания следующих разделов
+
+## Связи с другими темами:
+- **Назад:** ← Основополагающие принципы
+- **Сейчас:** 📍 Детальное изучение
+- **Вперед:** → Практические применения
+
+### Методы запоминания:
+- 📝 Составьте конспект ключевых моментов
+- 🎯 Найдите связи с уже изученным
+- 🔄 Повторите через несколько часов
+"""
+            
+        case .chart:
+            return """
+# 📊 Анализ графика и визуализаций
+
+## Тип представленного материала
+График демонстрирует важные закономерности и тренды изучаемого предмета.
+
+### Структура графика:
+- **Оси координат:** 
+  - X-ось: Независимая переменная  
+  - Y-ось: Зависимая переменная
+- **Масштаб:** Единицы измерения и диапазон
+- **Данные:** Точки, линии тренда, аномалии
+
+### Как анализировать график:
+1. **Изучите оси** — что они показывают
+2. **Найдите тренд** — общее направление
+3. **Выделите экстремумы** — максимумы и минимумы  
+4. **Ищите закономерности** — повторяющиеся паттерны
+
+```
+Математическое описание тренда:
+y = f(x) где f — функция зависимости
+```
+
+> **Важно:** Всегда проверяйте единицы измерения на осях
+
+## Практическое значение:
+- ✅ Подтверждает теоретические выводы
+- 📈 Показывает реальные измерения
+- 🔮 Помогает в прогнозировании
+- 🎯 Выявляет скрытые закономерности
+
+### Ключевые вопросы:
+- Какую гипотезу подтверждает график?
+- Есть ли неожиданные результаты?
+- Как эти данные применить на практике?
+- Какие выводы можно сделать для будущих исследований?
+"""
+            
+        case .areaSelection:
+            return """
+# ✂️ Анализ выделенной области
+
+## Детальное изучение фрагмента
+Выбранная область содержит концентрированную информацию, требующую особого внимания.
+
+### Что включает выделение:
+- **Текстовый контент** — основная информация
+- **Формулы/выражения** — математические соотношения
+- **Диаграммы/схемы** — визуальные элементы
+- **Ссылки/сноски** — дополнительные источники
+
+### План изучения выделения:
+1. **Первое чтение** — общее понимание
+2. **Детальный анализ** — разбор каждого элемента
+3. **Связи** — как соотносится с общей темой
+4. **Практика** — где применить знания
+
+```
+Формула из выделенного фрагмента:
+∫f(x)dx = F(x) + C
+```
+
+### Стратегии запоминания:
+- 🧩 Разбейте на логические части
+- 🔗 Найдите связи с уже изученным
+- 📋 Создайте схему или карту понятий
+- 🎯 Сформулируйте главную идею одним предложением
+
+> **Совет:** Этот фрагмент часто является ключом к пониманию всей темы
+
+## Проверка понимания:
+- ☑️ Могу объяснить своими словами?
+- ☑️ Понимаю все термины?
+- ☑️ Вижу связь с общей темой?
+- ☑️ Знаю, где применить?
+
+**Результат:** 🎓 Глубокое понимание ключевого материала
+"""
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func colorForActionType(_ type: AIActionType) -> Color {
+        switch type {
+        case .screenshot:
+            return .blue
+        case .aiNote:
+            return .purple
+        case .chart:
+            return .green
+        case .areaSelection:
+            return .red
+        }
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        formatter.locale = Locale(identifier: "ru_RU")
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - Markdown Parser
+
+struct MarkdownElement {
+    let id = UUID()
+    let type: MarkdownType
+    let content: String
+    let number: Int?
+    
+    init(type: MarkdownType, content: String, number: Int? = nil) {
+        self.type = type
+        self.content = content
+        self.number = number
+    }
+}
+
+enum MarkdownType {
+    case heading1, heading2, heading3
+    case paragraph
+    case bulletPoint
+    case numberedList
+    case code
+    case blockquote
+}
+
+/// Простой парсер Markdown для отображения
+private func parseMarkdown(_ markdown: String) -> [MarkdownElement] {
+    let lines = markdown.components(separatedBy: .newlines)
+    var elements: [MarkdownElement] = []
+    var listCounter = 1
+    
+    for line in lines {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        
+        if trimmed.isEmpty {
+            continue
+        }
+        
+        // Заголовки
+        if trimmed.hasPrefix("# ") {
+            elements.append(MarkdownElement(type: .heading1, content: String(trimmed.dropFirst(2))))
+        } else if trimmed.hasPrefix("## ") {
+            elements.append(MarkdownElement(type: .heading2, content: String(trimmed.dropFirst(3))))
+        } else if trimmed.hasPrefix("### ") {
+            elements.append(MarkdownElement(type: .heading3, content: String(trimmed.dropFirst(4))))
+        }
+        // Маркированный список
+        else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+            elements.append(MarkdownElement(type: .bulletPoint, content: String(trimmed.dropFirst(2))))
+            listCounter = 1
+        }
+        // Нумерованный список
+        else if let range = trimmed.range(of: #"^\d+\.\s"#, options: .regularExpression) {
+            let content = String(trimmed[range.upperBound...])
+            elements.append(MarkdownElement(type: .numberedList, content: content, number: listCounter))
+            listCounter += 1
+        }
+        // Цитата
+        else if trimmed.hasPrefix("> ") {
+            elements.append(MarkdownElement(type: .blockquote, content: String(trimmed.dropFirst(2))))
+        }
+        // Код
+        else if trimmed.hasPrefix("```") {
+            continue // Пропускаем маркеры кода
+        }
+        // Обычный текст
+        else {
+            elements.append(MarkdownElement(type: .paragraph, content: trimmed))
+            listCounter = 1
+        }
+    }
+    
+    return elements
+}
+
+#Preview {
+    AIResultSheet(
+        result: AIResult(
+            title: "Анализ страницы",
+            content: """
+# Результат анализа
+## Основные концепции
+Квантовая механика описывает поведение материи на атомном уровне.
+
+### Ключевые принципы:
+- Принцип неопределенности
+- Волновая природа частиц
+- Квантовые состояния
+
+### Формулы:
+```
+E = mc²
+ΔxΔp ≥ ħ/2
+```
+
+> Важно понимать, что квантовая механика кардинально отличается от классической физики.
+
+## Вопросы для понимания:
+1. Что такое квантовая суперпозиция?
+2. Как работает принцип неопределенности?
+3. Какие практические применения у квантовой физики?
+""",
+            actionType: .screenshot
+        ),
+        isPresented: .constant(true),
+        onSaveToNotes: { _ in }
+    )
+}

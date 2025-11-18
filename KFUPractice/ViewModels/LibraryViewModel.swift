@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import PDFKit
+import Combine
 
 /// ViewModel для экрана библиотеки книг
 @MainActor
@@ -18,6 +19,9 @@ class LibraryViewModel: ObservableObject {
     @Published var searchText = ""
     @Published var sortBy: BookSortOption = .dateAdded
     @Published var filterBy: BookFilterOption = .all
+    @Published var smartNotes: [Note] = []
+    
+    private var cancellables = Set<AnyCancellable>()
     
     // Реальный сервис для хранения книг
     private let bookStorage = BookStorageService.shared
@@ -26,8 +30,17 @@ class LibraryViewModel: ObservableObject {
         print("📱 [LibraryViewModel] Инициализация LibraryViewModel")
         // Загружаем сохраненные книги при инициализации
         loadBooks()
+        // Загружаем умные заметки
+        loadSmartNotes()
         // Показываем информацию о хранилище для диагностики
         bookStorage.getStorageInfo()
+        
+        // Подписываемся на изменения в NotesManager для автоматического обновления
+        NotesManager.shared.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.loadSmartNotes()
+            }
+        }.store(in: &cancellables)
     }
     
     // MARK: - Public Methods
@@ -152,6 +165,24 @@ class LibraryViewModel: ObservableObject {
         }
     }
     
+    /// Поиск умных заметок
+    func searchNotes(query: String) {
+        if query.isEmpty {
+            loadSmartNotes()
+        } else {
+            // Получаем все умные заметки из NotesManager
+            let allSmartNotes = NotesManager.shared.getAllSmartNotes()
+            
+            // Фильтруем заметки по поисковому запросу
+            smartNotes = allSmartNotes.filter { note in
+                note.selectedText.localizedCaseInsensitiveContains(query) ||
+                (note.userText?.localizedCaseInsensitiveContains(query) ?? false)
+            }
+            
+            print("🔍 [LibraryViewModel] Поиск '\(query)': найдено \(smartNotes.count) заметок")
+        }
+    }
+    
     /// Сортировка книг
     func sortBooks(by option: BookSortOption) {
         sortBy = option
@@ -181,6 +212,24 @@ class LibraryViewModel: ObservableObject {
         result = result.filter { filterBy.matches(book: $0) }
         
         return result.sorted(by: sortBy.sortFunction)
+    }
+    
+    /// Загрузить все умные заметки из всех книг
+    func loadSmartNotes() {
+        print("🧠 [LibraryViewModel] Загрузка умных заметок...")
+        
+        // Получаем все умные заметки из NotesManager
+        smartNotes = NotesManager.shared.getAllSmartNotes()
+        
+        print("🧠 [LibraryViewModel] Загружено умных заметок: \(smartNotes.count)")
+        
+        // Выводим статистику для отладки
+        NotesManager.shared.printStatistics()
+    }
+    
+    /// Получить заметки для определенной книги
+    private func getNotesForBook(_ bookId: UUID) -> [Note] {
+        return NotesManager.shared.getNotesForBook(bookId)
     }
     
     // MARK: - Demo Content Creation

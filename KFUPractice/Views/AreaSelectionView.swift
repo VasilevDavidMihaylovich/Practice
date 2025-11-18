@@ -12,6 +12,7 @@ import PDFKit
 /// Компонент для выбора области с регулируемой рамкой
 struct AreaSelectionView: View {
     @Binding var isPresented: Bool
+    @Binding var showNavigationBar: Bool
     let pdfDocument: PDFDocument?
     let currentPageNumber: Int
     let onScanComplete: ((UIImage, String) -> Void)?
@@ -55,6 +56,7 @@ struct AreaSelectionView: View {
                 // Выбранная область с рамкой
                 if !hideInterface {
                     selectionFrame(geometry: geometry)
+                        .ignoresSafeArea()
                 }
                 
                 // Кнопка сканирования
@@ -62,7 +64,7 @@ struct AreaSelectionView: View {
                     scanButton
                         .position(
                             x: selectionRect.midX,
-                            y: selectionRect.maxY + 50
+                            y: selectionRect.maxY - 30
                         )
                 }
                 
@@ -71,7 +73,7 @@ struct AreaSelectionView: View {
                     closeButton
                         .position(
                             x: selectionRect.midX,
-                            y: selectionRect.minY - 40
+                            y: selectionRect.minY - 90
                         )
                 }
                 
@@ -148,6 +150,7 @@ struct AreaSelectionView: View {
     private func selectionFrame(geometry: GeometryProxy) -> some View {
         ZStack {
             Color.black.opacity(0.1)
+                .ignoresSafeArea()
             // Вырезанная область (прозрачная)
             Path { path in
                 let screenRect = geometry.frame(in: .local)
@@ -172,7 +175,7 @@ struct AreaSelectionView: View {
             // Углы для изменения размера
             resizeCorners
         }
-        
+        .ignoresSafeArea()
     }
     
     // MARK: - Resize Corners
@@ -227,12 +230,13 @@ struct AreaSelectionView: View {
     private var scanButton: some View {
         Button {
             performScan()
+            showNavigationBar = true
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "camera.viewfinder")
                     .font(.system(size: 20, weight: .semibold))
                 
-                Text("Сканировать")
+                Text("Выделить")
                     .font(.system(size: 18, weight: .semibold))
             }
             .foregroundColor(.white)
@@ -258,6 +262,7 @@ struct AreaSelectionView: View {
         Button {
             withAnimation {
                 isPresented = false
+                showNavigationBar = true
             }
         } label: {
             Image(systemName: "xmark.circle.fill")
@@ -830,16 +835,4 @@ struct AreaSelectionView: View {
 }
 
 // MARK: - Preview
-
-#Preview {
-    AreaSelectionView(
-        isPresented: .constant(true),
-        pdfDocument: nil,
-        currentPageNumber: 0,
-        onScanComplete: { image, text in
-            print("Распознанный текст: \(text)")
-            print("Изображение: \(image.size)")
-        }
-    )
-}
 

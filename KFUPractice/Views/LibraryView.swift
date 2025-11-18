@@ -11,15 +11,50 @@ import SwiftUI
 struct LibraryView: View {
     @StateObject private var viewModel = LibraryViewModel()
     @State private var showingFileImporter = false
+    @State private var selectedTab = 0 // 0 - Книги, 1 - Умные заметки
+    @State private var searchText = "" // Локальное состояние поиска
+    @State private var selectedNote: Note? // Для навигации к деталям заметки
     
     var body: some View {
         NavigationView {
-            content
+            VStack(spacing: 0) {
+                // Переключатель разделов
+                Picker("Разделы", selection: $selectedTab) {
+                    Text("Книги").tag(0)
+                    Text("AI заметки").tag(1)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding()
+                
+                // Содержимое в зависимости от выбранной вкладки
+                if selectedTab == 0 {
+                    content
+                } else {
+                    smartNotesContent
+                }
+            }
                 .navigationTitle("Библиотека")
                 .navigationBarTitleDisplayMode(.large)
-                .searchable(text: $viewModel.searchText, prompt: "Поиск книг...")
-                .onChange(of: viewModel.searchText) { newValue in
-                    viewModel.searchBooks(query: newValue)
+                .searchable(
+                    text: $searchText, 
+                    prompt: selectedTab == 0 ? "Поиск книг..." : "Поиск заметок..."
+                )
+                .onChange(of: searchText) { newValue in
+                    if selectedTab == 0 {
+                        viewModel.searchBooks(query: newValue)
+                    } else {
+                        viewModel.searchNotes(query: newValue)
+                    }
+                }
+                .onChange(of: selectedTab) { newTab in
+                    // Очищаем поиск при смене вкладки
+                    searchText = ""
+                    // Выполняем поиск для новой вкладки с пустым запросом
+                    if newTab == 0 {
+                        viewModel.searchBooks(query: "")
+                    } else {
+                        viewModel.searchNotes(query: "")
+                    }
                 }
                 .toolbar {
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -197,6 +232,60 @@ struct LibraryView: View {
                     .background(Color(.white).opacity(0.8))
             }
         }
+    }
+    
+    private var smartNotesContent: some View {
+        Group {
+            if viewModel.smartNotes.isEmpty {
+
+                smartNotesEmptyStateView
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        // Список умных заметок
+                        ForEach(viewModel.smartNotes) { note in
+                            SmartNoteCardView(note: note)
+                                .onTapGesture {
+                                    selectedNote = note
+                                }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                }
+            }
+        }
+        .onAppear {
+            viewModel.loadSmartNotes()
+        }
+        .sheet(item: $selectedNote) { note in
+            NoteDetailView(note: note)
+        }
+    }
+    
+    private var smartNotesEmptyStateView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            Image(systemName: "brain")
+                .font(.system(size: 64))
+                .foregroundColor(.secondary)
+            
+            VStack(spacing: 8) {
+                Text("Умные заметки не найдены")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                
+                Text("Создавайте AI заметки и графики во время чтения")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.bottom, 30)
+            
+            Spacer()
+        }
+        .padding(.horizontal, 32)
     }
     
     private var gridColumns: [GridItem] {
@@ -611,6 +700,71 @@ struct BookCardView: View {
                         .foregroundColor(.white.opacity(0.8))
                 }
             }
+    }
+}
+
+/// Карточка умной заметки
+struct SmartNoteCardView: View {
+    let note: Note
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Заголовок с типом заметки
+            HStack {
+                Image(systemName: note.type.systemImage)
+                    .foregroundColor(note.type == .aiNote ? .purple : .green)
+                    .font(.title2)
+                
+                Text(note.type.displayName)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Text(note.formattedDate)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            // Изображение (если есть)
+            if let imageData = note.imageData,
+               let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxHeight: 200)
+                    .cornerRadius(8)
+            }
+            
+            // Текст заметки
+            if !note.selectedText.isEmpty {
+                Text("Выделенный текст:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Text(note.selectedText)
+                    .font(.body)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+            }
+            
+            // Пользовательский комментарий
+            if let userText = note.userText, !userText.isEmpty {
+                Text("Комментарий:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Text(userText)
+                    .font(.callout)
+                    .foregroundColor(.primary)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.secondarySystemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        )
     }
 }
 

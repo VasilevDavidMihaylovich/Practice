@@ -743,6 +743,12 @@ class ReadingViewModel: ObservableObject {
         notes.append(note)
     }
     
+    func addNote(_ note: Note) {
+        notes.append(note)
+        // Сохраняем также в глобальный менеджер заметок
+        NotesManager.shared.addNote(note, for: book.id)
+    }
+    
     // MARK: - UI Actions
     
     func selectText(_ text: String) {

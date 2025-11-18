@@ -14,6 +14,8 @@ enum NoteType: String, CaseIterable, Codable {
     case formula = "formula"              // Математическая формула
     case paragraph = "paragraph"          // Абзац или больший фрагмент
     case custom = "custom"                // Произвольная пользовательская заметка
+    case aiNote = "aiNote"                // AI заметка с изображением
+    case chart = "chart"                  // График с изображением
     
     var displayName: String {
         switch self {
@@ -22,6 +24,8 @@ enum NoteType: String, CaseIterable, Codable {
         case .formula: return "Формула"
         case .paragraph: return "Абзац"
         case .custom: return "Заметка"
+        case .aiNote: return "AI заметка"
+        case .chart: return "График"
         }
     }
     
@@ -32,6 +36,8 @@ enum NoteType: String, CaseIterable, Codable {
         case .formula: return "function"
         case .paragraph: return "doc.text"
         case .custom: return "pencil.circle"
+        case .aiNote: return "brain"
+        case .chart: return "chart.bar"
         }
     }
 }
@@ -46,6 +52,7 @@ struct Note: Codable, Identifiable, Equatable {
     let selectedText: String              // Выделенный текст из книги
     let userText: String?                 // Пользовательский комментарий
     let aiExplanation: String?            // Объяснение от AI (если есть)
+    let imageData: Data?                  // Изображение для AI заметок и графиков
     
     // Позиция в книге
     let position: ReadingPosition         // Позиция в книге
@@ -64,6 +71,7 @@ struct Note: Codable, Identifiable, Equatable {
         selectedText: String,
         userText: String? = nil,
         aiExplanation: String? = nil,
+        imageData: Data? = nil,
         position: ReadingPosition,
         pageNumber: Int,
         dateCreated: Date = Date(),
@@ -77,6 +85,7 @@ struct Note: Codable, Identifiable, Equatable {
         self.selectedText = selectedText
         self.userText = userText
         self.aiExplanation = aiExplanation
+        self.imageData = imageData
         self.position = position
         self.pageNumber = pageNumber
         self.dateCreated = dateCreated
@@ -97,6 +106,11 @@ extension Note {
     /// Есть ли пользовательский текст
     var hasUserText: Bool {
         userText != nil && !userText!.isEmpty
+    }
+    
+    /// Есть ли изображение
+    var hasImage: Bool {
+        imageData != nil
     }
     
     /// Основной контент для отображения
@@ -125,10 +139,20 @@ extension Note {
         return formatter.string(from: dateCreated)
     }
     
+    /// Формат даты изменения для отображения
+    var formattedModifiedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        formatter.locale = Locale(identifier: "ru_RU")
+        return formatter.string(from: dateModified)
+    }
+    
     /// Обновление заметки с новыми данными
     func updated(
         userText: String? = nil,
         aiExplanation: String? = nil,
+        imageData: Data? = nil,
         isBookmarked: Bool? = nil,
         tags: [String]? = nil
     ) -> Note {
@@ -139,6 +163,7 @@ extension Note {
             selectedText: self.selectedText,
             userText: userText ?? self.userText,
             aiExplanation: aiExplanation ?? self.aiExplanation,
+            imageData: imageData ?? self.imageData,
             position: self.position,
             pageNumber: self.pageNumber,
             dateCreated: self.dateCreated,
