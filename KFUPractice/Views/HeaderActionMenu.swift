@@ -66,7 +66,7 @@ struct HeaderActionMenu: View {
                             // Кнопка "Маркер"
                             actionButton(
                                 icon: "highlighter",
-                                label: "Маркер",
+                                label: "Пометка",
                                 color: .yellow,
                                 delay: 0.05,
                                 action: {

@@ -8,12 +8,29 @@
 import Foundation
 
 /// Результат обработки ИИ
-struct AIResult {
-    let id: UUID = UUID()
+struct AIResult: Equatable {
+    let id: UUID
     let title: String
     let content: String
     let actionType: AIActionType
-    let createdAt: Date = Date()
+    let timestamp: Date
+    let metadata: [String: String]
+    
+    init(
+        id: UUID = UUID(),
+        actionType: AIActionType,
+        title: String,
+        content: String,
+        timestamp: Date = Date(),
+        metadata: [String: String] = [:]
+    ) {
+        self.id = id
+        self.actionType = actionType
+        self.title = title
+        self.content = content
+        self.timestamp = timestamp
+        self.metadata = metadata
+    }
 }
 
 /// Типы действий ИИ

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2A809A932ECCBBE600B481FA /* GoogleGenerativeAI in Frameworks */ = {isa = PBXBuildFile; productRef = 2A809A922ECCBBE600B481FA /* GoogleGenerativeAI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		2AD2A4492EC13A3900268CBD /* KFUPractice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KFUPractice.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2A809A932ECCBBE600B481FA /* GoogleGenerativeAI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +70,7 @@
 			);
 			name = KFUPractice;
 			packageProductDependencies = (
+				2A809A922ECCBBE600B481FA /* GoogleGenerativeAI */,
 			);
 			productName = KFUPractice;
 			productReference = 2AD2A4492EC13A3900268CBD /* KFUPractice.app */;
@@ -94,6 +100,9 @@
 			);
 			mainGroup = 2AD2A4402EC13A3900268CBD;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				2A809A912ECCBBE600B481FA /* XCRemoteSwiftPackageReference "deprecated-generative-ai-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2AD2A44A2EC13A3900268CBD /* Products */;
 			projectDirPath = "";
@@ -337,6 +346,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		2A809A912ECCBBE600B481FA /* XCRemoteSwiftPackageReference "deprecated-generative-ai-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google-gemini/deprecated-generative-ai-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.5.6;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2A809A922ECCBBE600B481FA /* GoogleGenerativeAI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2A809A912ECCBBE600B481FA /* XCRemoteSwiftPackageReference "deprecated-generative-ai-swift" */;
+			productName = GoogleGenerativeAI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2AD2A4412EC13A3900268CBD /* Project object */;
 }

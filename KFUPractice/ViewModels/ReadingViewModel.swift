@@ -41,6 +41,8 @@ class ReadingViewModel: ObservableObject {
     @Published var textExplanation: Explanation?
     @Published var isAnalyzingText: Bool = false
     
+    @Published var latestAIResult: AIResult?
+    
     @Published var notes: [Note] = []
     @Published var readingSettings = ReadingSettings()
     
@@ -881,7 +883,67 @@ class ReadingViewModel: ObservableObject {
         print("📖 [ReadingViewModel] Книга: \(book.title)")
         print("📱 [ReadingViewModel] Формат: \(book.format)")
         
-        // Подготавливаем данные для отправки ИИ
+        do {
+            // Создаем конспект с помощью GeminiManager
+            print("🤖 [ReadingViewModel] Создание конспекта через GeminiManager...")
+            let summary = try await GeminiManager.shared.generateSummary(from: screenshot)
+            
+            // Создаем заметку с конспектом
+            let note = Note(
+                bookId: book.id,
+                type: .aiNote,
+                selectedText: "Конспект страницы \(currentPageNumber + 1)",
+                aiExplanation: summary,
+                imageData: screenshot.jpegData(compressionQuality: 0.8),
+                position: ReadingPosition(pageNumber: currentPageNumber + 1, progressPercentage: readingProgress),
+                pageNumber: currentPageNumber + 1,
+                tags: ["конспект", "ai", "скриншот"]
+            )
+            
+            // Добавляем заметку
+            addNote(note)
+            
+            // Создаем AI результат для отображения
+            let aiResult = AIResult(
+                actionType: .screenshot,
+                title: "Конспект страницы \(currentPageNumber + 1)",
+                content: summary,
+                metadata: [
+                    "pageNumber": "\(currentPageNumber + 1)",
+                    "bookTitle": book.title,
+                    "noteId": note.id.uuidString
+                ]
+            )
+            
+            // Устанавливаем результат для отображения в UI
+            latestAIResult = aiResult
+            
+            print("✅ [ReadingViewModel] Конспект создан и сохранен как заметка")
+            
+        } catch {
+            print("❌ [ReadingViewModel] Ошибка создания конспекта: \(error)")
+            
+            // Создаем AI результат с ошибкой для отображения
+            let errorResult = AIResult(
+                actionType: .screenshot,
+                title: "Ошибка создания конспекта",
+                content: "Произошла ошибка при создании конспекта: \(error.localizedDescription)\n\nПопробуйте еще раз или обратитесь в поддержку.",
+                metadata: [
+                    "pageNumber": "\(currentPageNumber + 1)",
+                    "bookTitle": book.title,
+                    "error": error.localizedDescription
+                ]
+            )
+            
+            latestAIResult = errorResult
+            
+            // Также вызываем legacy метод для логирования
+            await sendScreenshotToAI_Legacy(screenshot)
+        }
+    }
+    
+    /// Legacy метод отправки скриншота (для резерва)
+    private func sendScreenshotToAI_Legacy(_ screenshot: UIImage) async {
         let aiRequest = ScreenshotAIRequest(
             image: screenshot,
             pageNumber: currentPageNumber + 1,
@@ -890,7 +952,6 @@ class ReadingViewModel: ObservableObject {
             textContent: currentPageContent.isEmpty ? "Содержимое недоступно" : String(currentPageContent.prefix(500)) + "..."
         )
         
-        // Мок отправки ИИ
         await sendScreenshotToAI(aiRequest)
     }
     
@@ -931,7 +992,11 @@ private struct DefaultAIService: AIServiceProtocol {
     }
     
     func generateSummary(_ content: String) async throws -> String {
-        throw NSError(domain: "NotImplemented", code: 1, userInfo: [NSLocalizedDescriptionKey: "AI сервис будет реализован в следующих версиях"])
+        // Для текстового контента создаем простое изображение с текстом
+        // или используем существующий текстовый промпт
+        
+        // Временно возвращаем заглушку, так как GeminiManager работает с изображениями
+        return "Конспект будет доступен при создании скриншота страницы. Используйте кнопку 'Конспект' в меню действий."
     }
     
     func explainWord(_ word: String, context: String?, language: String) async throws -> Explanation {

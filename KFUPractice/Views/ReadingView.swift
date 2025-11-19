@@ -47,6 +47,17 @@ struct ReadingView: View {
         .onTapGesture {
             handleTap()
         }
+        .onChange(of: viewModel.latestAIResult) { aiResult in
+            if let result = aiResult {
+                print("📱 [ReadingView] Получен AI результат: \(result.title)")
+                currentAIResult = result
+                showAIResult = true
+                // Сбрасываем latestAIResult, чтобы избежать повторных показов
+                DispatchQueue.main.async {
+                    viewModel.latestAIResult = nil
+                }
+            }
+        }
         .sheet(isPresented: $viewModel.showSettingsPanel) {
             ReadingSettingsView(settings: $viewModel.readingSettings)
         }
@@ -363,11 +374,7 @@ struct ReadingView: View {
             // 6. Через 2 секунды скрываем лоадер и восстанавливаем интерфейс
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 self.resetScreenshotState()
-                
-                // Показываем результат ИИ
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.showAIResultForAction(.screenshot)
-                }
+                // Результат ИИ будет показан автоматически через onChange latestAIResult
             }
         }
     }
@@ -759,9 +766,9 @@ struct ReadingView: View {
     /// Создать базовый AIResult для отображения, если основные данные отсутствуют
     private func createFallbackAIResult() -> AIResult {
         return AIResult(
-            title: "Демонстрация AI функций",
-            content: "", // Пустой content будет заменен на mock данные в AIResultSheet
-            actionType: .aiNote
+            actionType: .aiNote,
+            title: "Демонстрация AI функций", 
+            content: "" // Пустой content будет заменен на mock данные в AIResultSheet
         )
     }
     
@@ -769,6 +776,8 @@ struct ReadingView: View {
     
     /// Показать результат ИИ для конкретного действия
     private func showAIResultForAction(_ actionType: AIActionType) {
+        // Теперь результаты screenshot приходят через latestAIResult
+        // Этот метод остается только для других типов действий
         currentAIResult = generateMockAIResult(for: actionType)
         showAIResult = true
     }
@@ -906,7 +915,7 @@ struct ReadingView: View {
 """
         }
         
-        return AIResult(title: title, content: content, actionType: actionType)
+        return AIResult(actionType: actionType, title: title, content: content)
     }
     
     /// Сохранить результат ИИ в заметки

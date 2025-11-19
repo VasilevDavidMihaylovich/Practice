@@ -80,7 +80,7 @@ struct AIResultSheet: View {
                 .padding(.horizontal, 16)
                 .foregroundColor(.primary)
             
-            Text("Создано: \(formatDate(result.createdAt))")
+            Text("Создано: \(formatDate(result.timestamp))")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.bottom, 16)
@@ -93,110 +93,19 @@ struct AIResultSheet: View {
     // MARK: - Markdown Content
     
     private var markdownContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             let content = result.content.trimmingCharacters(in: .whitespacesAndNewlines)
             let markdownToDisplay = content.isEmpty ? getMockContentForActionType(result.actionType) : content
             
-            ForEach(parseMarkdown(markdownToDisplay), id: \.id) { element in
-                markdownElement(element)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    
-    @ViewBuilder
-    private func markdownElement(_ element: MarkdownElement) -> some View {
-        switch element.type {
-        case .heading1:
-            Text(element.content)
-                .font(.title)
-                .fontWeight(.bold)
-                .padding(.top, 20)
-                .padding(.bottom, 8)
-                .foregroundColor(.primary)
-            
-        case .heading2:
-            Text(element.content)
-                .font(.title2)
-                .fontWeight(.semibold)
-                .padding(.top, 16)
-                .padding(.bottom, 6)
-                .foregroundColor(.primary)
-            
-        case .heading3:
-            Text(element.content)
-                .font(.title3)
-                .fontWeight(.medium)
-                .padding(.top, 12)
-                .padding(.bottom, 4)
-                .foregroundColor(.primary)
-            
-        case .paragraph:
-            Text(element.content)
+            // Используем встроенную поддержку SwiftUI для markdown
+            // Это автоматически обрабатывает **bold**, *italic*, ~~strikethrough~~ и другие inline элементы
+            Text(.init(markdownToDisplay))
                 .font(.body)
                 .lineSpacing(4)
-                .padding(.bottom, 8)
+                .textSelection(.enabled) // Позволяет выделять и копировать текст
                 .foregroundColor(.primary)
-            
-        case .bulletPoint:
-            HStack(alignment: .top, spacing: 8) {
-                Text("•")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 2)
-                
-                Text(element.content)
-                    .font(.body)
-                    .lineSpacing(4)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-            }
-            .padding(.leading, 16)
-            .padding(.bottom, 4)
-            
-        case .numberedList:
-            HStack(alignment: .top, spacing: 8) {
-                Text("\(element.number ?? 1).")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 2)
-                
-                Text(element.content)
-                    .font(.body)
-                    .lineSpacing(4)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-            }
-            .padding(.leading, 16)
-            .padding(.bottom, 4)
-            
-        case .code:
-            Text(element.content)
-                .font(.system(.body, design: .monospaced))
-                .padding(12)
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                .foregroundColor(.primary)
-            
-        case .blockquote:
-            HStack(alignment: .top, spacing: 12) {
-                Rectangle()
-                    .fill(Color(.systemBlue))
-                    .frame(width: 4)
-                
-                Text(element.content)
-                    .font(.body)
-                    .italic()
-                    .lineSpacing(4)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-            }
-            .padding(.leading, 16)
-            .padding(.bottom, 8)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     // MARK: - Actions
@@ -423,108 +332,37 @@ y = f(x) где f — функция зависимости
     }
 }
 
-// MARK: - Markdown Parser
-
-struct MarkdownElement {
-    let id = UUID()
-    let type: MarkdownType
-    let content: String
-    let number: Int?
-    
-    init(type: MarkdownType, content: String, number: Int? = nil) {
-        self.type = type
-        self.content = content
-        self.number = number
-    }
-}
-
-enum MarkdownType {
-    case heading1, heading2, heading3
-    case paragraph
-    case bulletPoint
-    case numberedList
-    case code
-    case blockquote
-}
-
-/// Простой парсер Markdown для отображения
-private func parseMarkdown(_ markdown: String) -> [MarkdownElement] {
-    let lines = markdown.components(separatedBy: .newlines)
-    var elements: [MarkdownElement] = []
-    var listCounter = 1
-    
-    for line in lines {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        
-        if trimmed.isEmpty {
-            continue
-        }
-        
-        // Заголовки
-        if trimmed.hasPrefix("# ") {
-            elements.append(MarkdownElement(type: .heading1, content: String(trimmed.dropFirst(2))))
-        } else if trimmed.hasPrefix("## ") {
-            elements.append(MarkdownElement(type: .heading2, content: String(trimmed.dropFirst(3))))
-        } else if trimmed.hasPrefix("### ") {
-            elements.append(MarkdownElement(type: .heading3, content: String(trimmed.dropFirst(4))))
-        }
-        // Маркированный список
-        else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
-            elements.append(MarkdownElement(type: .bulletPoint, content: String(trimmed.dropFirst(2))))
-            listCounter = 1
-        }
-        // Нумерованный список
-        else if let range = trimmed.range(of: #"^\d+\.\s"#, options: .regularExpression) {
-            let content = String(trimmed[range.upperBound...])
-            elements.append(MarkdownElement(type: .numberedList, content: content, number: listCounter))
-            listCounter += 1
-        }
-        // Цитата
-        else if trimmed.hasPrefix("> ") {
-            elements.append(MarkdownElement(type: .blockquote, content: String(trimmed.dropFirst(2))))
-        }
-        // Код
-        else if trimmed.hasPrefix("```") {
-            continue // Пропускаем маркеры кода
-        }
-        // Обычный текст
-        else {
-            elements.append(MarkdownElement(type: .paragraph, content: trimmed))
-            listCounter = 1
-        }
-    }
-    
-    return elements
-}
-
 #Preview {
     AIResultSheet(
         result: AIResult(
-            title: "Анализ страницы",
+            actionType: .screenshot,
+            title: "Анализ страницы с поддержкой Markdown",
             content: """
 # Результат анализа
+
 ## Основные концепции
-Квантовая механика описывает поведение материи на атомном уровне.
+Квантовая механика описывает **поведение материи** на *атомном уровне*.
 
 ### Ключевые принципы:
-- Принцип неопределенности
-- Волновая природа частиц
-- Квантовые состояния
+- **Принцип неопределенности** - фундаментальное ограничение
+- *Волновая природа частиц* - дуализм волна-частица  
+- ~~Классическая физика~~ → **Квантовая механика**
 
-### Формулы:
+### Важные формулы:
 ```
 E = mc²
 ΔxΔp ≥ ħ/2
 ```
 
-> Важно понимать, что квантовая механика кардинально отличается от классической физики.
+> **Важно**: квантовая механика кардинально отличается от классической физики.
 
 ## Вопросы для понимания:
-1. Что такое квантовая суперпозиция?
-2. Как работает принцип неопределенности?
-3. Какие практические применения у квантовой физики?
-""",
-            actionType: .screenshot
+1. Что такое **квантовая суперпозиция**?
+2. Как работает *принцип неопределенности*?
+3. Какие **практические применения** у квантовой физики?
+
+**Заключение**: изучение квантовой механики открывает *новые горизонты* понимания мира.
+"""
         ),
         isPresented: .constant(true),
         onSaveToNotes: { _ in }

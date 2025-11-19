@@ -17,12 +17,13 @@ struct AreaSelectionView: View {
     let currentPageNumber: Int
     let onScanComplete: ((UIImage, String) -> Void)?
     
-    @State private var selectionRect: CGRect = CGRect(x: 50, y: 200, width: 200, height: 150)
+    @State private var selectionRect: CGRect = CGRect(x: 100, y: 200, width: 200, height: 150)
     @State private var isDragging: Bool = false
     @State private var dragOffset: CGSize = .zero
     @State private var isResizing: Bool = false
     @State private var resizeCorner: ResizeCorner = .none
     @State private var showScanButton: Bool = true
+    @State private var initialRect: CGRect = .zero
     
     // MARK: - Screenshot Animation States
     @State private var isCapturingScreenshot = false
@@ -42,90 +43,86 @@ struct AreaSelectionView: View {
     }
     
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // Полупрозрачный фон (не полностью затемненный, чтобы видеть PDF)
-//                Color.black.opacity(0.3)
-//                    .ignoresSafeArea()
-//                    .onTapGesture {
-//                        withAnimation {
-//                            isPresented = false
-//                        }
-//                    }
-                
-                // Выбранная область с рамкой
-                if !hideInterface {
-                    selectionFrame(geometry: geometry)
-                        .ignoresSafeArea()
-                }
-                
-                // Кнопка сканирования
-                if showScanButton && !hideInterface {
-                    scanButton
-                        .position(
-                            x: selectionRect.midX,
-                            y: selectionRect.maxY - 30
-                        )
-                }
-                
-                // Кнопка закрытия
-                if !hideInterface {
-                    closeButton
-                        .position(
-                            x: selectionRect.midX,
-                            y: selectionRect.minY - 90
-                        )
-                }
-                
-                // Эффект вспышки для скриншота
-                if showFlashEffect {
-                    Rectangle()
-                        .fill(Color.white)
-                        .ignoresSafeArea()
-                        .zIndex(400)
-                        .onAppear {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                showFlashEffect = false
-                            }
-                        }
-                }
-                
-                // Лоадер после скриншота
-                if showLoadingIndicator {
-                    ZStack {
-                        Color.black.opacity(0.3)
+        ZStack {
+            // Фон на весь экран (включая safe area)
+            Color.black.opacity(0.1)
+                .ignoresSafeArea(.all)
+            
+            GeometryReader { geometry in
+                ZStack {
+                    // Выбранная область с рамкой
+                    if !hideInterface {
+                        selectionFrame(geometry: geometry)
+                    }
+                    
+                    // Кнопка сканирования
+                    if showScanButton && !hideInterface {
+                        scanButton
+                            .position(
+                                x: selectionRect.midX,
+                                y: selectionRect.maxY + 30
+                            )
+                    }
+                    
+                    // Кнопка закрытия
+                    if !hideInterface {
+                        closeButton
+                            .position(
+                                x: selectionRect.midX,
+                                y: selectionRect.minY - 60
+                            )
+                    }
+                    
+                    // Эффект вспышки для скриншота
+                    if showFlashEffect {
+                        Rectangle()
+                            .fill(Color.white)
                             .ignoresSafeArea()
-                        
-                        VStack(spacing: 16) {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(1.2)
+                            .zIndex(400)
+                            .onAppear {
+                                withAnimation(.easeOut(duration: 0.3)) {
+                                    showFlashEffect = false
+                                }
+                            }
+                    }
+                    
+                    // Лоадер после скриншота
+                    if showLoadingIndicator {
+                        ZStack {
+                            Color.black.opacity(0.3)
+                                .ignoresSafeArea()
                             
-                            Text("Обработка области...")
-                                .foregroundColor(.white)
-                                .font(.subheadline)
+                            VStack(spacing: 16) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.2)
+                                
+                                Text("Обработка области...")
+                                    .foregroundColor(.white)
+                                    .font(.subheadline)
+                            }
+                            .padding(24)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(.regularMaterial)
+                            )
                         }
-                        .padding(24)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(.regularMaterial)
-                        )
+                        .zIndex(500)
                     }
-                    .zIndex(500)
                 }
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            handleDrag(value: value, geometry: geometry)
+                        }
+                        .onEnded { _ in
+                            isDragging = false
+                            isResizing = false
+                            resizeCorner = .none
+                            initialRect = .zero
+                        }
+                )
             }
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        handleDrag(value: value, geometry: geometry)
-                    }
-                    .onEnded { _ in
-                        isDragging = false
-                        isResizing = false
-                        resizeCorner = .none
-                        dragOffset = .zero
-                    }
-            )
         }
         .onAppear {
             // Инициализируем рамку по центру экрана
@@ -133,15 +130,18 @@ struct AreaSelectionView: View {
                 if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                    let window = windowScene.windows.first {
                     let screenSize = window.bounds.size
+                    let frameWidth = min(screenSize.width * 0.6, 300)
+                    let frameHeight = min(screenSize.height * 0.4, 200)
                     selectionRect = CGRect(
-                        x: screenSize.width * 0.2,
-                        y: screenSize.height * 0.3,
-                        width: screenSize.width * 0.6,
-                        height: screenSize.height * 0.4
+                        x: (screenSize.width - frameWidth) / 2,
+                        y: (screenSize.height - frameHeight) / 2,
+                        width: frameWidth,
+                        height: frameHeight
                     )
                 }
             }
         }
+        .ignoresSafeArea(.all)
     }
     
     // MARK: - Selection Frame
@@ -149,8 +149,6 @@ struct AreaSelectionView: View {
     @ViewBuilder
     private func selectionFrame(geometry: GeometryProxy) -> some View {
         ZStack {
-            Color.black.opacity(0.1)
-                .ignoresSafeArea()
             // Вырезанная область (прозрачная)
             Path { path in
                 let screenRect = geometry.frame(in: .local)
@@ -158,10 +156,9 @@ struct AreaSelectionView: View {
                 path.addRect(selectionRect)
             }
             .fill(
-                Color.black.opacity(0.4),      // <- тут любой цвет и opacity
+                Color.black.opacity(0.4),
                 style: FillStyle(eoFill: true)
             )
-//            .fill(Color.white.opacity(0.1))
             
             // Рамка выбранной области
             RoundedRectangle(cornerRadius: 8)
@@ -175,7 +172,6 @@ struct AreaSelectionView: View {
             // Углы для изменения размера
             resizeCorners
         }
-        .ignoresSafeArea()
     }
     
     // MARK: - Resize Corners
@@ -220,9 +216,9 @@ struct AreaSelectionView: View {
             .frame(width: cornerSize, height: cornerSize)
             .overlay(
                 Circle()
-                    .stroke(Color.white, lineWidth: 2)
+                    .stroke(Color.white, lineWidth: 3)
             )
-//            .shadow(radius: 4)
+            .shadow(color: Color.black.opacity(0.3), radius: 2, x: 0, y: 1)
     }
     
     // MARK: - Buttons
@@ -279,84 +275,94 @@ struct AreaSelectionView: View {
     // MARK: - Gesture Handling
     
     private func handleDrag(value: DragGesture.Value, geometry: GeometryProxy) {
-        let location = value.location
         let screenRect = geometry.frame(in: .local)
         
-        // Проверяем, на каком элементе происходит тап
+        // Проверяем начало жеста
         if !isDragging && !isResizing {
-            // Определяем, на углу ли тап
-            let corner = detectCorner(at: location)
+            let corner = detectCorner(at: value.startLocation)
+            
             if corner != .none {
+                // Начинаем изменение размера
                 isResizing = true
                 resizeCorner = corner
-            } else if selectionRect.contains(location) {
+                initialRect = selectionRect
+            } else if selectionRect.contains(value.startLocation) {
+                // Начинаем перемещение
                 isDragging = true
+                initialRect = selectionRect
             }
         }
         
         if isDragging {
             // Перемещение рамки
-            let newX = selectionRect.origin.x + value.translation.width - dragOffset.width
-            let newY = selectionRect.origin.y + value.translation.height - dragOffset.height
+            let deltaX = value.translation.width
+            let deltaY = value.translation.height
+            
+            let newX = initialRect.origin.x + deltaX
+            let newY = initialRect.origin.y + deltaY
             
             // Ограничиваем перемещение границами экрана
             let clampedX = max(0, min(newX, screenRect.width - selectionRect.width))
             let clampedY = max(0, min(newY, screenRect.height - selectionRect.height))
             
             selectionRect.origin = CGPoint(x: clampedX, y: clampedY)
-            dragOffset = value.translation
             
         } else if isResizing {
             // Изменение размера
-            var newRect = selectionRect
+            let deltaX = value.translation.width
+            let deltaY = value.translation.height
+            
+            var newRect = initialRect
             
             switch resizeCorner {
             case .topLeft:
-                let deltaX = value.translation.width
-                let deltaY = value.translation.height
-                newRect.origin.x = max(0, min(selectionRect.origin.x + deltaX, selectionRect.maxX - minSize.width))
-                newRect.origin.y = max(0, min(selectionRect.origin.y + deltaY, selectionRect.maxY - minSize.height))
-                newRect.size.width = selectionRect.maxX - newRect.origin.x
-                newRect.size.height = selectionRect.maxY - newRect.origin.y
+                newRect.origin.x = max(0, min(initialRect.maxX - minSize.width, initialRect.origin.x + deltaX))
+                newRect.origin.y = max(0, min(initialRect.maxY - minSize.height, initialRect.origin.y + deltaY))
+                newRect.size.width = max(minSize.width, initialRect.maxX - newRect.origin.x)
+                newRect.size.height = max(minSize.height, initialRect.maxY - newRect.origin.y)
                 
             case .topRight:
-                let deltaY = value.translation.height
-                newRect.origin.y = max(0, min(selectionRect.origin.y + deltaY, selectionRect.maxY - minSize.height))
-                newRect.size.width = max(minSize.width, selectionRect.width + value.translation.width)
-                newRect.size.height = selectionRect.maxY - newRect.origin.y
-                newRect.size.width = min(newRect.size.width, screenRect.width - newRect.origin.x)
+                newRect.origin.y = max(0, min(initialRect.maxY - minSize.height, initialRect.origin.y + deltaY))
+                newRect.size.width = max(minSize.width, min(screenRect.width - initialRect.origin.x, initialRect.width + deltaX))
+                newRect.size.height = max(minSize.height, initialRect.maxY - newRect.origin.y)
                 
             case .bottomLeft:
-                let deltaX = value.translation.width
-                newRect.origin.x = max(0, min(selectionRect.origin.x + deltaX, selectionRect.maxX - minSize.width))
-                newRect.size.width = selectionRect.maxX - newRect.origin.x
-                newRect.size.height = max(minSize.height, selectionRect.height + value.translation.height)
-                newRect.size.height = min(newRect.size.height, screenRect.height - newRect.origin.y)
+                newRect.origin.x = max(0, min(initialRect.maxX - minSize.width, initialRect.origin.x + deltaX))
+                newRect.size.width = max(minSize.width, initialRect.maxX - newRect.origin.x)
+                newRect.size.height = max(minSize.height, min(screenRect.height - initialRect.origin.y, initialRect.height + deltaY))
                 
             case .bottomRight:
-                newRect.size.width = max(minSize.width, selectionRect.width + value.translation.width)
-                newRect.size.height = max(minSize.height, selectionRect.height + value.translation.height)
-                newRect.size.width = min(newRect.size.width, screenRect.width - newRect.origin.x)
-                newRect.size.height = min(newRect.size.height, screenRect.height - newRect.origin.y)
+                newRect.size.width = max(minSize.width, min(screenRect.width - initialRect.origin.x, initialRect.width + deltaX))
+                newRect.size.height = max(minSize.height, min(screenRect.height - initialRect.origin.y, initialRect.height + deltaY))
                 
             case .none:
                 break
             }
+            
+            // Ограничиваем размер границами экрана
+            newRect.origin.x = max(0, min(newRect.origin.x, screenRect.width - newRect.size.width))
+            newRect.origin.y = max(0, min(newRect.origin.y, screenRect.height - newRect.size.height))
             
             selectionRect = newRect
         }
     }
     
     private func detectCorner(at point: CGPoint) -> ResizeCorner {
-        let cornerRadius: CGFloat = cornerSize / 2 + 10
+        let cornerRadius: CGFloat = 30  // Увеличиваем радиус для лучшего обнаружения
         
-        if distance(point, to: CGPoint(x: selectionRect.minX, y: selectionRect.minY)) < cornerRadius {
+        let topLeft = CGPoint(x: selectionRect.minX, y: selectionRect.minY)
+        let topRight = CGPoint(x: selectionRect.maxX, y: selectionRect.minY)
+        let bottomLeft = CGPoint(x: selectionRect.minX, y: selectionRect.maxY)
+        let bottomRight = CGPoint(x: selectionRect.maxX, y: selectionRect.maxY)
+        
+        // Проверяем углы в порядке приоритета
+        if distance(point, to: topLeft) < cornerRadius {
             return .topLeft
-        } else if distance(point, to: CGPoint(x: selectionRect.maxX, y: selectionRect.minY)) < cornerRadius {
+        } else if distance(point, to: topRight) < cornerRadius {
             return .topRight
-        } else if distance(point, to: CGPoint(x: selectionRect.minX, y: selectionRect.maxY)) < cornerRadius {
+        } else if distance(point, to: bottomLeft) < cornerRadius {
             return .bottomLeft
-        } else if distance(point, to: CGPoint(x: selectionRect.maxX, y: selectionRect.maxY)) < cornerRadius {
+        } else if distance(point, to: bottomRight) < cornerRadius {
             return .bottomRight
         }
         
