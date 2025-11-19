@@ -97,13 +97,9 @@ struct AIResultSheet: View {
             let content = result.content.trimmingCharacters(in: .whitespacesAndNewlines)
             let markdownToDisplay = content.isEmpty ? getMockContentForActionType(result.actionType) : content
             
-            // Используем встроенную поддержку SwiftUI для markdown
-            // Это автоматически обрабатывает **bold**, *italic*, ~~strikethrough~~ и другие inline элементы
-            Text(.init(markdownToDisplay))
-                .font(.body)
-                .lineSpacing(4)
-                .textSelection(.enabled) // Позволяет выделять и копировать текст
-                .foregroundColor(.primary)
+            // Используем кастомный AttributedMarkdownView с полной поддержкой Markdown
+            // Поддерживает заголовки, списки, ссылки, кодовые блоки и другие элементы
+            AttributedMarkdownView(markdown: markdownToDisplay)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
