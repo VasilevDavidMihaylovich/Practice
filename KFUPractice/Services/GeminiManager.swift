@@ -81,7 +81,91 @@ final class GeminiManager {
         return text
     }
     
-    // MARK: - Конспект функционал
+    // MARK: - График функционал
+    
+    func generateChart(from image: UIImage, selectedArea: String? = nil) async throws -> (explanation: String, chartData: ChartData) {
+        let prompt = createChartPrompt(selectedArea: selectedArea)
+        let response = try await generateText(from: image, prompt: prompt)
+        
+        // Парсим ответ для извлечения данных графика
+        return try parseChartResponse(response)
+    }
+    
+    private func createChartPrompt(selectedArea: String?) -> String {
+        let areaInstruction = selectedArea != nil ? 
+            "Сосредоточься на выделенной области: \(selectedArea!)" : 
+            "Проанализируй все изображение"
+            
+        return """
+        \(areaInstruction)
+        
+        Найди математические выражения, функции, уравнения или данные, которые можно представить в виде графика.
+        
+        ВАЖНО: Ответ должен содержать ДВА раздела, разделенных строкой "---CHART_DATA---":
+        
+        1. До разделителя: Объяснение на русском языке в формате Markdown
+        2. После разделителя: JSON данные для графика
+        
+        Формат JSON:
+        {
+          "type": "line|bar|area|scatter",
+          "title": "Название графика",
+          "description": "Краткое описание",
+          "dataPoints": [
+            {"x": число, "y": число, "label": "подпись (опционально)"}
+          ]
+        }
+        
+        Пример ответа:
+        
+        ## Квадратичная функция
+        
+        Найдена функция **y = x²** - это классическая квадратичная функция.
+        
+        ### Характеристики:
+        - **Вершина**: в точке (0, 0)
+        - **Направление**: ветви направлены вверх
+        - **Область значений**: y ≥ 0
+        
+        ---CHART_DATA---
+        {
+          "type": "line",
+          "title": "График функции y = x²",
+          "description": "Квадратичная парабола с вершиной в начале координат",
+          "dataPoints": [
+            {"x": -3, "y": 9},
+            {"x": -2, "y": 4},
+            {"x": -1, "y": 1},
+            {"x": 0, "y": 0},
+            {"x": 1, "y": 1},
+            {"x": 2, "y": 4},
+            {"x": 3, "y": 9}
+          ]
+        }
+        
+        Если математических выражений не найдено, верни объяснение почему и предложи альтернативы.
+        """
+    }
+    
+    private func parseChartResponse(_ response: String) throws -> (explanation: String, chartData: ChartData) {
+        let components = response.components(separatedBy: "---CHART_DATA---")
+        
+        guard components.count == 2 else {
+            throw GeminiError.invalidResponse("Неверный формат ответа")
+        }
+        
+        let explanation = components[0].trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonString = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw GeminiError.invalidResponse("Не удалось преобразовать JSON")
+        }
+        
+        let decoder = JSONDecoder()
+        let chartData = try decoder.decode(ChartData.self, from: jsonData)
+        
+        return (explanation: explanation, chartData: chartData)
+    }
     
     func generateSummary(from image: UIImage) async throws -> String {
         let prompt = createSummaryPrompt()
@@ -171,4 +255,5 @@ enum GeminiError: Error {
     case imageEncodingFailed
     case httpError(statusCode: Int, body: String)
     case emptyResponse
+    case invalidResponse(String)
 }

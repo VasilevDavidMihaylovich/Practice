@@ -198,7 +198,7 @@ struct NoteDetailView: View {
             
             // Если это AI результат, отображаем как Markdown
             if userText.contains("AI результат") || userText.contains("#") || userText.contains("**") {
-                MarkdownView(text: userText)
+                                NoteMarkdownView(text: userText)
             } else {
                 Text(userText)
                     .font(.body)
@@ -226,7 +226,7 @@ struct NoteDetailView: View {
                     .foregroundColor(.primary)
             }
             
-            MarkdownView(text: explanation)
+                            NoteMarkdownView(text: explanation)
         }
     }
     
@@ -284,8 +284,8 @@ struct NoteDetailView: View {
 
 // MARK: - Markdown View
 
-/// Простой компонент для отображения Markdown текста
-struct MarkdownView: View {
+/// Компонент для отображения Markdown текста в заметках
+struct NoteMarkdownView: View {
     let text: String
     
     var body: some View {

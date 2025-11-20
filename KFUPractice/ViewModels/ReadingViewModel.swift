@@ -868,7 +868,80 @@ class ReadingViewModel: ObservableObject {
     
     // MARK: - Screenshot Functionality
     
-    /// Создать скриншот содержимого и подготовить для отправки ИИ
+    /// Создать график из выделенной области
+    func captureChart(screenshot: UIImage, selectedText: String) {
+        Task {
+            await processChart(screenshot, selectedText: selectedText)
+        }
+    }
+    
+    @MainActor
+    private func processChart(_ screenshot: UIImage, selectedText: String) async {
+        print("📊 [ReadingViewModel] Обработка графика...")
+        print("🖼️ [ReadingViewModel] Размер: \(screenshot.size)")
+        print("📄 [ReadingViewModel] Выделенный текст: \(selectedText)")
+        print("📖 [ReadingViewModel] Книга: \(book.title)")
+        
+        do {
+            // Создаем график с помощью GeminiManager
+            print("🤖 [ReadingViewModel] Создание графика через GeminiManager...")
+            let (explanation, chartData) = try await GeminiManager.shared.generateChart(
+                from: screenshot, 
+                selectedArea: selectedText
+            )
+            
+            // Создаем заметку с графиком
+            let note = Note(
+                bookId: book.id,
+                type: .chart,
+                selectedText: "График страницы \(currentPageNumber + 1)",
+                aiExplanation: explanation,
+                imageData: screenshot.jpegData(compressionQuality: 0.8),
+                position: ReadingPosition(pageNumber: currentPageNumber + 1, progressPercentage: readingProgress),
+                pageNumber: currentPageNumber + 1,
+                tags: ["график", "ai", "chart", "математика"]
+            )
+            
+            // Добавляем заметку
+            addNote(note)
+            
+            // Создаем AI результат для отображения
+            let aiResult = AIResult(
+                actionType: .chart,
+                title: chartData.title,
+                content: explanation,
+                metadata: [
+                    "pageNumber": "\(currentPageNumber + 1)",
+                    "bookTitle": book.title,
+                    "noteId": note.id.uuidString,
+                    "chartType": chartData.type.rawValue
+                ],
+                chartData: chartData
+            )
+            
+            // Устанавливаем результат для отображения в UI
+            latestAIResult = aiResult
+            
+            print("✅ [ReadingViewModel] График создан и сохранен как заметка")
+            
+        } catch {
+            print("❌ [ReadingViewModel] Ошибка создания графика: \(error)")
+            
+            // Создаем AI результат с ошибкой для отображения
+            let errorResult = AIResult(
+                actionType: .chart,
+                title: "Ошибка создания графика",
+                content: "Произошла ошибка при создании графика: \(error.localizedDescription)\n\n**Возможные причины:**\n- На изображении нет математических выражений\n- Данные не подходят для построения графика\n- Проблема с сетевым подключением\n\n*Попробуйте выделить область с четкими математическими формулами или данными.*",
+                metadata: [
+                    "pageNumber": "\(currentPageNumber + 1)",
+                    "bookTitle": book.title,
+                    "error": error.localizedDescription
+                ]
+            )
+            
+            latestAIResult = errorResult
+        }
+    }
     func captureScreenshot(screenshot: UIImage) {
         Task {
             await processScreenshot(screenshot)

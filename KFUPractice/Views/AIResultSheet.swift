@@ -93,13 +93,17 @@ struct AIResultSheet: View {
     // MARK: - Markdown Content
     
     private var markdownContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             let content = result.content.trimmingCharacters(in: .whitespacesAndNewlines)
             let markdownToDisplay = content.isEmpty ? getMockContentForActionType(result.actionType) : content
             
-            // Используем кастомный AttributedMarkdownView с полной поддержкой Markdown
-            // Поддерживает заголовки, списки, ссылки, кодовые блоки и другие элементы
-            AttributedMarkdownView(markdown: markdownToDisplay)
+            // Используем новый MarkdownView компонент
+            MarkdownView(markdown: markdownToDisplay)
+            
+            // Отображаем график если есть данные
+            if let chartData = result.chartData {
+                ChartView(chartData: chartData)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -329,38 +333,68 @@ y = f(x) где f — функция зависимости
 }
 
 #Preview {
-    AIResultSheet(
-        result: AIResult(
-            actionType: .screenshot,
-            title: "Анализ страницы с поддержкой Markdown",
-            content: """
-# Результат анализа
+    VStack(spacing: 20) {
+        // Пример с конспектом
+        AIResultSheet(
+            result: AIResult(
+                actionType: .screenshot,
+                title: "Конспект с Markdown",
+                content: """
+# Квадратичная функция
 
-## Основные концепции
-Квантовая механика описывает **поведение материи** на *атомном уровне*.
+## Основные свойства
+Функция **y = x²** является классической **квадратичной функцией**.
 
-### Ключевые принципы:
-- **Принцип неопределенности** - фундаментальное ограничение
-- *Волновая природа частиц* - дуализм волна-частица  
-- ~~Классическая физика~~ → **Квантовая механика**
+### Характеристики:
+- **Вершина** в точке (0, 0)
+- **Направление ветвей**: вверх
+- **Область определения**: все действительные числа
+- **Область значений**: y ≥ 0
 
 ### Важные формулы:
-```
-E = mc²
-ΔxΔp ≥ ħ/2
-```
+- *Стандартный вид*: y = ax² + bx + c
+- *Дискриминант*: D = b² - 4ac
+- *Координаты вершины*: (-b/2a, -D/4a)
 
-> **Важно**: квантовая механика кардинально отличается от классической физики.
-
-## Вопросы для понимания:
-1. Что такое **квантовая суперпозиция**?
-2. Как работает *принцип неопределенности*?
-3. Какие **практические применения** у квантовой физики?
-
-**Заключение**: изучение квантовой механики открывает *новые горизонты* понимания мира.
+> **Примечание**: Квадратичная функция описывает многие физические процессы
 """
-        ),
-        isPresented: .constant(true),
-        onSaveToNotes: { _ in }
-    )
+            ),
+            isPresented: .constant(true),
+            onSaveToNotes: { _ in }
+        )
+        
+        // Пример с графиком
+        AIResultSheet(
+            result: AIResult(
+                actionType: .chart,
+                title: "График квадратичной функции",
+                content: """
+## Анализ функции y = x²
+
+Найдена **квадратичная функция** y = x² на изображении.
+
+### Ключевые особенности:
+- **Парабола** с ветвями, направленными вверх
+- **Минимум** в точке (0, 0)  
+- *Симметрична* относительно оси Y
+
+**График** наглядно демонстрирует поведение функции.
+""",
+                chartData: ChartData(
+                    type: .line,
+                    title: "y = x²",
+                    description: "Квадратичная парабола",
+                    dataPoints: [
+                        ChartData.DataPoint(x: -2, y: 4),
+                        ChartData.DataPoint(x: -1, y: 1),
+                        ChartData.DataPoint(x: 0, y: 0),
+                        ChartData.DataPoint(x: 1, y: 1),
+                        ChartData.DataPoint(x: 2, y: 4)
+                    ]
+                )
+            ),
+            isPresented: .constant(true),
+            onSaveToNotes: { _ in }
+        )
+    }
 }

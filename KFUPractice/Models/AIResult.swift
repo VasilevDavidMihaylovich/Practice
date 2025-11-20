@@ -15,6 +15,7 @@ struct AIResult: Equatable {
     let actionType: AIActionType
     let timestamp: Date
     let metadata: [String: String]
+    let chartData: ChartData? // Данные для отображения графика
     
     init(
         id: UUID = UUID(),
@@ -22,7 +23,8 @@ struct AIResult: Equatable {
         title: String,
         content: String,
         timestamp: Date = Date(),
-        metadata: [String: String] = [:]
+        metadata: [String: String] = [:],
+        chartData: ChartData? = nil
     ) {
         self.id = id
         self.actionType = actionType
@@ -30,6 +32,7 @@ struct AIResult: Equatable {
         self.content = content
         self.timestamp = timestamp
         self.metadata = metadata
+        self.chartData = chartData
     }
 }
 

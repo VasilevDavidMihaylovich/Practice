@@ -197,16 +197,14 @@ struct ReadingView: View {
                     pdfDocument: viewModel.pdfDocument,
                     currentPageNumber: viewModel.currentPageNumber,
                     onScanComplete: { image, text in
-                        print("📊 [ReadingView] График - текст: \(text)")
-                        print("🖼️ [ReadingView] График - изображение: \(image.size)")
-                        // Создаем заметку с графиком
-                        self.createChart(image: image, text: text)
-                        
-                        // Показываем результат ИИ
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            self.showAIResultForAction(.chart)
-                        }
-                    }
+                    print("📊 [ReadingView] График - текст: \(text)")
+                    print("🖼️ [ReadingView] График - изображение: \(image.size)")
+                    
+                    // Используем новый метод для создания графика
+                    self.viewModel.captureChart(screenshot: image, selectedText: text)
+                    
+                    // Показываем результат через latestAIResult автоматически
+                }
                 )
                 .zIndex(200)
             }
@@ -736,31 +734,6 @@ struct ReadingView: View {
         viewModel.addNote(note)
         
         print("🧠 [ReadingView] AI заметка создана и сохранена")
-    }
-    
-    private func createChart(image: UIImage, text: String) {
-        guard let imageData = image.pngData() else {
-            print("❌ [ReadingView] Не удалось преобразовать изображение в Data")
-            return
-        }
-        
-        let note = Note(
-            bookId: viewModel.book.id,
-            type: .chart,
-            selectedText: text,
-            userText: "График создан \(Date())",
-            imageData: imageData,
-            position: ReadingPosition(
-                pageNumber: viewModel.currentPageNumber,
-                progressPercentage: viewModel.readingProgress
-            ),
-            pageNumber: viewModel.currentPageNumber
-        )
-        
-        // Сохраняем заметку
-        viewModel.addNote(note)
-        
-        print("💾 [ReadingView] Результат ИИ сохранен в заметки")
     }
     
     /// Создать базовый AIResult для отображения, если основные данные отсутствуют
